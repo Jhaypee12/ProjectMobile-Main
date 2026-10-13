@@ -1,10 +1,20 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
+  // Picks the correct host based on where the app is running.
+  static String get baseUrl {
+    // Chrome / web
+    if (kIsWeb) return 'http://localhost:3000/api';
 
-  // Android emulator: use http://10.0.2.2:3000
-  static const baseUrl = 'http://localhost:3000/api';
+    // Android emulator — localhost points at the emulator, not your PC
+    if (Platform.isAndroid) return 'http://10.0.2.2:3000/api';
+
+    // iOS simulator, macOS, Windows, Linux
+    return 'http://localhost:3000/api';
+  }
 
   static const _headers = {'Content-Type': 'application/json'};
 

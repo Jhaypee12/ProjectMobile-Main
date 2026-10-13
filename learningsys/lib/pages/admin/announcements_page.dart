@@ -18,22 +18,39 @@ class AnnouncementsPage extends StatefulWidget {
 }
 
 class _AnnouncementsPageState extends State<AnnouncementsPage> {
-  late Future<List<_Announcement>> _future;
+  List<_Announcement> _items = [];
+  bool _loading = true;
+  Object? _error;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _load();
   }
 
-  Future<List<_Announcement>> _load() async {
-    final raw = await ApiService.getAnnouncements();
-    return raw.map((j) => _Announcement.fromJson(j)).toList();
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final raw = await ApiService.getAnnouncements();
+      if (!mounted) return;
+      setState(() {
+        _items = raw.map((j) => _Announcement.fromJson(j)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    await _load();
   }
 
   void _showDetails(_Announcement a) {
@@ -226,186 +243,177 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: FutureBuilder<List<_Announcement>>(
-        future: _future,
-        builder: (context, snapshot) {
-          final loading =
-              snapshot.connectionState == ConnectionState.waiting;
-          final items = snapshot.data ?? [];
-
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Announcements',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: darkText,
-                        ),
-                      ),
-                      if (widget.canManage)
-                        ElevatedButton.icon(
-                          onPressed: () => _showForm(),
-                          icon: const Icon(Icons.add, color: Colors.white),
-                          label: const Text(
-                            'Post',
-                            style: TextStyle(color: Colors.white),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: blue,
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: purple,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'COURSE ANNOUNCEMENTS',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          'Updates and notices from your courses.',
-                          style:
-                              TextStyle(color: Colors.white, fontSize: 14),
-                        ),
-                      ],
+                  const Text(
+                    'Announcements',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: darkText,
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  if (loading)
-                    const Padding(
-                      padding: EdgeInsets.all(40),
-                      child: Center(child: CircularProgressIndicator()),
-                    )
-                  else if (snapshot.hasError)
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: Text(
-                        'Could not load announcements.\n${snapshot.error}',
-                        style: const TextStyle(color: red),
+                  if (widget.canManage)
+                    ElevatedButton.icon(
+                      onPressed: () => _showForm(),
+                      icon: const Icon(Icons.add, color: Colors.white),
+                      label: const Text(
+                        'Post',
+                        style: TextStyle(color: Colors.white),
                       ),
-                    )
-                  else if (items.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.all(20),
-                      child: Text('No announcements yet.'),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: cardBorder),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final a in items)
-                            Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(vertical: 10),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    a.title,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: darkText,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${a.course} • ${a.date}',
-                                    style: const TextStyle(
-                                        color: darkText, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      ElevatedButton(
-                                        onPressed: () => _showDetails(a),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: blue,
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child: const Text('Details'),
-                                      ),
-                                      if (widget.canManage) ...[
-                                        OutlinedButton(
-                                          onPressed: () =>
-                                              _showForm(existing: a),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: purple,
-                                            side: const BorderSide(
-                                                color: purple),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                          child: const Text('Edit'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () => _remove(a),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: red,
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                          child: const Text('Remove'),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const Divider(
-                                      height: 24, color: cardBorder),
-                                ],
-                              ),
-                            ),
-                        ],
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: blue,
                       ),
                     ),
                 ],
               ),
-            ),
-          );
-        },
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: purple,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'COURSE ANNOUNCEMENTS',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    SizedBox(height: 6),
+                    Text(
+                      'Updates and notices from your courses.',
+                      style:
+                          TextStyle(color: Colors.white, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    'Could not load announcements.\n$_error',
+                    style: const TextStyle(color: red),
+                  ),
+                )
+              else if (_items.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(20),
+                  child: Text('No announcements yet.'),
+                )
+              else
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: cardBorder),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      for (final a in _items)
+                        Padding(
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                a.title,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: darkText,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${a.course} • ${a.date}',
+                                style: const TextStyle(
+                                    color: darkText, fontSize: 13),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  ElevatedButton(
+                                    onPressed: () => _showDetails(a),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: blue,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: const Text('Details'),
+                                  ),
+                                  if (widget.canManage) ...[
+                                    OutlinedButton(
+                                      onPressed: () =>
+                                          _showForm(existing: a),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: purple,
+                                        side: const BorderSide(
+                                            color: purple),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: const Text('Edit'),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () => _remove(a),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: red,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                      ),
+                                      child: const Text('Remove'),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const Divider(
+                                  height: 24, color: cardBorder),
+                            ],
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

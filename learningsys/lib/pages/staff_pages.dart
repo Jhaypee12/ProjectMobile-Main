@@ -13,7 +13,7 @@ typedef _Task = ({String title, String course, String due, int done, int total})
 typedef _Sub = ({String student, String task, String when, bool graded});
 
 const List<_Course> _courses = [
-  (name: 'Intro to Data Analysis', students: 42, progress: 0.71, grade: 'B+'),
+  (name: 'Intro to Data Analysis ', students: 42, progress: 0.71, grade: 'B+'),
   (name: 'Statistics for Everyone', students: 38, progress: 0.55, grade: 'B'),
   (name: 'Academic Writing Essentials', students: 31, progress: 0.84, grade: 'A-'),
   (name: 'UX Design Foundations', students: 36, progress: 0.66, grade: 'B+'),

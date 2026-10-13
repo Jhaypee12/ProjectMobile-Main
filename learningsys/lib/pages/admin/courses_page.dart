@@ -17,22 +17,39 @@ class AdminCoursesPage extends StatefulWidget {
 }
 
 class _AdminCoursesPageState extends State<AdminCoursesPage> {
-  late Future<List<_Course>> _future;
+  List<_Course> _courses = [];
+  bool _loading = true;
+  Object? _error;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _load();
   }
 
-  Future<List<_Course>> _load() async {
-    final raw = await ApiService.getCourses();
-    return raw.map((j) => _Course.fromJson(j)).toList();
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final raw = await ApiService.getCourses();
+      if (!mounted) return;
+      setState(() {
+        _courses = raw.map((j) => _Course.fromJson(j)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    await _load();
   }
 
   void _showDetails(_Course c) {
@@ -233,161 +250,152 @@ class _AdminCoursesPageState extends State<AdminCoursesPage> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: FutureBuilder<List<_Course>>(
-        future: _future,
-        builder: (context, snapshot) {
-          final loading =
-              snapshot.connectionState == ConnectionState.waiting;
-          final courses = snapshot.data ?? [];
-
-          return RefreshIndicator(
-            onRefresh: _refresh,
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      child: RefreshIndicator(
+        onRefresh: _refresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Courses',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: darkText,
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        onPressed: () => _showForm(),
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        label: const Text(
-                          'New Course',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      border: Border.all(color: cardBorder),
-                      borderRadius: BorderRadius.circular(16),
+                  const Text(
+                    'Courses',
+                    style: TextStyle(
+                      fontSize: 32,
+                      fontWeight: FontWeight.bold,
+                      color: darkText,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Course Management',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: darkText,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        if (loading)
-                          const Padding(
-                            padding: EdgeInsets.all(40),
-                            child:
-                                Center(child: CircularProgressIndicator()),
-                          )
-                        else if (snapshot.hasError)
-                          Text(
-                            'Could not load courses.\n${snapshot.error}',
-                            style: const TextStyle(color: red),
-                          )
-                        else if (courses.isEmpty)
-                          const Text('No courses yet.')
-                        else
-                          for (final c in courses)
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 10),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    c.name,
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      color: darkText,
-                                      fontSize: 15,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '${c.instructor} • ${c.grade} (${c.score}%)',
-                                    style: const TextStyle(
-                                        color: darkText, fontSize: 13),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Wrap(
-                                    spacing: 8,
-                                    runSpacing: 8,
-                                    children: [
-                                      OutlinedButton(
-                                        onPressed: () => _showDetails(c),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: purple,
-                                          side: const BorderSide(
-                                              color: purple),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child:
-                                            const Text('Course Information'),
-                                      ),
-                                      OutlinedButton(
-                                        onPressed: () =>
-                                            _showForm(existing: c),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: purple,
-                                          side: const BorderSide(
-                                              color: purple),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child: const Text('Edit'),
-                                      ),
-                                      ElevatedButton(
-                                        onPressed: () => _remove(c),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: red,
-                                          foregroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                        ),
-                                        child: const Text('Delete'),
-                                      ),
-                                    ],
-                                  ),
-                                  const Divider(
-                                      height: 24, color: cardBorder),
-                                ],
-                              ),
-                            ),
-                      ],
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: () => _showForm(),
+                    icon: const Icon(Icons.add, color: Colors.white),
+                    label: const Text(
+                      'New Course',
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: blue,
                     ),
                   ),
                 ],
               ),
-            ),
-          );
-        },
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: cardBorder),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Course Management',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: darkText,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    if (_loading)
+                      const Padding(
+                        padding: EdgeInsets.all(40),
+                        child:
+                            Center(child: CircularProgressIndicator()),
+                      )
+                    else if (_error != null)
+                      Text(
+                        'Could not load courses.\n$_error',
+                        style: const TextStyle(color: red),
+                      )
+                    else if (_courses.isEmpty)
+                      const Text('No courses yet.')
+                    else
+                      for (final c in _courses)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                c.name,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: darkText,
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${c.instructor} • ${c.grade} (${c.score}%)',
+                                style: const TextStyle(
+                                    color: darkText, fontSize: 13),
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  OutlinedButton(
+                                    onPressed: () => _showDetails(c),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: purple,
+                                      side: const BorderSide(
+                                          color: purple),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child:
+                                        const Text('Course Information'),
+                                  ),
+                                  OutlinedButton(
+                                    onPressed: () =>
+                                        _showForm(existing: c),
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: purple,
+                                      side: const BorderSide(
+                                          color: purple),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: const Text('Edit'),
+                                  ),
+                                  ElevatedButton(
+                                    onPressed: () => _remove(c),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: red,
+                                      foregroundColor: Colors.white,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                    child: const Text('Delete'),
+                                  ),
+                                ],
+                              ),
+                              const Divider(
+                                  height: 24, color: cardBorder),
+                            ],
+                          ),
+                        ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

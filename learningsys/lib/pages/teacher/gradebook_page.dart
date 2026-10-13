@@ -17,19 +17,37 @@ class GradebookPage extends StatefulWidget {
 }
 
 class _GradebookPageState extends State<GradebookPage> {
-  late Future<List<_Grade>> _future;
+  List<_Grade> _grades = [];
+  bool _loading = true;
+  Object? _error;
   List<AppUser> _students = [];
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _load();
     _loadStudents();
   }
 
-  Future<List<_Grade>> _load() async {
-    final raw = await ApiService.getGrades();
-    return raw.map((j) => _Grade.fromJson(j)).toList();
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final raw = await ApiService.getGrades();
+      if (!mounted) return;
+      setState(() {
+        _grades = raw.map((j) => _Grade.fromJson(j)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _loadStudents() async {
@@ -44,13 +62,12 @@ class _GradebookPageState extends State<GradebookPage> {
         });
       }
     } catch (_) {
-      
+
     }
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    await _load();
   }
 
   double _average(List<_Grade> grades) {
@@ -303,175 +320,167 @@ class _GradebookPageState extends State<GradebookPage> {
 
   @override
   Widget build(BuildContext context) {
+    final avg = _average(_grades);
+
     return Scaffold(
       backgroundColor: lightBlue,
       body: SafeArea(
-        child: FutureBuilder<List<_Grade>>(
-          future: _future,
-          builder: (context, snapshot) {
-            final loading =
-                snapshot.connectionState == ConnectionState.waiting;
-            final grades = snapshot.data ?? [];
-            final avg = _average(grades);
-
-            return RefreshIndicator(
-              onRefresh: _refresh,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Gradebook',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: darkText,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Gradebook',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: darkText,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: purple,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'All Courses',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: purple,
-                        borderRadius: BorderRadius.circular(16),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Class average: ${avg.toStringAsFixed(1)}%',
+                        style: const TextStyle(
+                            color: Colors.white, fontSize: 15),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    border: Border.all(color: cardBorder),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            'All Courses',
+                            'Course Grades',
                             style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 20,
+                              fontSize: 18,
                               fontWeight: FontWeight.bold,
+                              color: darkText,
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Class average: ${avg.toStringAsFixed(1)}%',
-                            style: const TextStyle(
-                                color: Colors.white, fontSize: 15),
+                          ElevatedButton(
+                            onPressed: () => _showForm(),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: blue,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Text('Add Grade'),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        border: Border.all(color: cardBorder),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text(
-                                'Course Grades',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: darkText,
+                      const SizedBox(height: 16),
+                      if (_loading)
+                        const Padding(
+                          padding: EdgeInsets.all(40),
+                          child: Center(
+                              child: CircularProgressIndicator()),
+                        )
+                      else if (_error != null)
+                        Text(
+                          'Could not load grades.\n$_error',
+                          style: const TextStyle(color: red),
+                        )
+                      else if (_grades.isEmpty)
+                        const Text('No grades yet.')
+                      else
+                        for (final g in _grades)
+                          Padding(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 8),
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  g.studentName,
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: darkText),
                                 ),
-                              ),
-                              ElevatedButton(
-                                onPressed: () => _showForm(),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: blue,
-                                  foregroundColor: Colors.white,
+                                Text(
+                                  '${g.course} • ${g.submission} • ${g.score}/${g.total}',
+                                  style: const TextStyle(
+                                      color: darkText, fontSize: 13),
                                 ),
-                                child: const Text('Add Grade'),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-                          if (loading)
-                            const Padding(
-                              padding: EdgeInsets.all(40),
-                              child: Center(
-                                  child: CircularProgressIndicator()),
-                            )
-                          else if (snapshot.hasError)
-                            Text(
-                              'Could not load grades.\n${snapshot.error}',
-                              style: const TextStyle(color: red),
-                            )
-                          else if (grades.isEmpty)
-                            const Text('No grades yet.')
-                          else
-                            for (final g in grades)
-                              Padding(
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 8),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 8,
                                   children: [
-                                    Text(
-                                      g.studentName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: darkText),
+                                    ElevatedButton(
+                                      onPressed: () =>
+                                          _showFeedback(g),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: blue,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Feedback'),
                                     ),
-                                    Text(
-                                      '${g.course} • ${g.submission} • ${g.score}/${g.total}',
-                                      style: const TextStyle(
-                                          color: darkText, fontSize: 13),
+                                    OutlinedButton(
+                                      onPressed: () =>
+                                          _showForm(existing: g),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: purple,
+                                        side: const BorderSide(
+                                            color: purple),
+                                      ),
+                                      child: const Text('Edit'),
                                     ),
-                                    const SizedBox(height: 6),
-                                    Wrap(
-                                      spacing: 8,
-                                      children: [
-                                        ElevatedButton(
-                                          onPressed: () =>
-                                              _showFeedback(g),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: blue,
-                                            foregroundColor: Colors.white,
-                                          ),
-                                          child: const Text('Feedback'),
-                                        ),
-                                        OutlinedButton(
-                                          onPressed: () =>
-                                              _showForm(existing: g),
-                                          style: OutlinedButton.styleFrom(
-                                            foregroundColor: purple,
-                                            side: const BorderSide(
-                                                color: purple),
-                                          ),
-                                          child: const Text('Edit'),
-                                        ),
-                                        ElevatedButton(
-                                          onPressed: () => _remove(g),
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: red,
-                                            foregroundColor: Colors.white,
-                                          ),
-                                          child: const Text('Delete'),
-                                        ),
-                                      ],
+                                    ElevatedButton(
+                                      onPressed: () => _remove(g),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: red,
+                                        foregroundColor: Colors.white,
+                                      ),
+                                      child: const Text('Delete'),
                                     ),
-                                    const Divider(
-                                        height: 24, color: cardBorder),
                                   ],
                                 ),
-                              ),
-                        ],
-                      ),
-                    ),
-                  ],
+                                const Divider(
+                                    height: 24, color: cardBorder),
+                              ],
+                            ),
+                          ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -500,7 +509,7 @@ class _Grade {
   });
 
   factory _Grade.fromJson(Map<String, dynamic> json) {
-   
+
     final studentField = json['student'];
     String studentId = '';
     String studentName = '(unknown)';

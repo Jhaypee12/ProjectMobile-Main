@@ -19,24 +19,41 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  late Future<List<_CalEvent>> _future;
+  List<_CalEvent> _events = [];
+  bool _loading = true;
+  Object? _error;
 
   bool get canManage => widget.role != Role.student;
 
   @override
   void initState() {
     super.initState();
-    _future = _load();
+    _load();
   }
 
-  Future<List<_CalEvent>> _load() async {
-    final raw = await ApiService.getEvents();
-    return raw.map((j) => _CalEvent.fromJson(j)).toList();
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final raw = await ApiService.getEvents();
+      if (!mounted) return;
+      setState(() {
+        _events = raw.map((j) => _CalEvent.fromJson(j)).toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e;
+        _loading = false;
+      });
+    }
   }
 
   Future<void> _refresh() async {
-    setState(() => _future = _load());
-    await _future;
+    await _load();
   }
 
   Future<void> _showForm({_CalEvent? existing}) async {
@@ -96,7 +113,7 @@ class _CalendarPageState extends State<CalendarPage> {
                             error = 'Title and date are required');
                         return;
                       }
-                      
+
                       final dateOk = RegExp(r'^\d{4}-\d{2}-\d{2}$')
                           .hasMatch(dateCtrl.text.trim());
                       if (!dateOk) {
@@ -225,88 +242,79 @@ class _CalendarPageState extends State<CalendarPage> {
 
   @override
   Widget build(BuildContext context) {
+    final baseDate = _events.isNotEmpty
+        ? (DateTime.tryParse(_events.first.date) ?? DateTime.now())
+        : DateTime.now();
+    final year = baseDate.year;
+    final month = baseDate.month;
+
     return Scaffold(
       backgroundColor: lightBlue,
       body: SafeArea(
-        child: FutureBuilder<List<_CalEvent>>(
-          future: _future,
-          builder: (context, snapshot) {
-            final loading =
-                snapshot.connectionState == ConnectionState.waiting;
-            final events = snapshot.data ?? [];
-
-            final baseDate = events.isNotEmpty
-                ? (DateTime.tryParse(events.first.date) ?? DateTime.now())
-                : DateTime.now();
-            final year = baseDate.year;
-            final month = baseDate.month;
-
-            return RefreshIndicator(
-              onRefresh: _refresh,
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+        child: RefreshIndicator(
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Calendar',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.bold,
-                            color: darkText,
-                          ),
-                        ),
-                        if (canManage)
-                          ElevatedButton.icon(
-                            onPressed: () => _showForm(),
-                            icon: const Icon(Icons.add, color: Colors.white),
-                            label: const Text(
-                              'Add',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: blue,
-                            ),
-                          ),
-                      ],
+                    const Text(
+                      'Calendar',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: darkText,
+                      ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      _monthLabel(year, month),
-                      style: const TextStyle(color: darkText, fontSize: 15),
-                    ),
-                    const SizedBox(height: 20),
-                    if (loading)
-                      const Padding(
-                        padding: EdgeInsets.all(40),
-                        child: Center(child: CircularProgressIndicator()),
-                      )
-                    else if (snapshot.hasError)
-                      Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Text(
-                          'Could not load events.\n${snapshot.error}',
-                          style: const TextStyle(color: red),
+                    if (canManage)
+                      ElevatedButton.icon(
+                        onPressed: () => _showForm(),
+                        icon: const Icon(Icons.add, color: Colors.white),
+                        label: const Text(
+                          'Add',
+                          style: TextStyle(color: Colors.white),
                         ),
-                      )
-                    else
-                      _MonthGrid(
-                        year: year,
-                        month: month,
-                        events: events,
-                        onEventTap: _showEventDetails,
-                        onEventDelete:
-                            canManage ? (e) => _remove(e) : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: blue,
+                        ),
                       ),
                   ],
                 ),
-              ),
-            );
-          },
+                const SizedBox(height: 6),
+                Text(
+                  _monthLabel(year, month),
+                  style: const TextStyle(color: darkText, fontSize: 15),
+                ),
+                const SizedBox(height: 20),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.all(40),
+                    child: Center(child: CircularProgressIndicator()),
+                  )
+                else if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Text(
+                      'Could not load events.\n$_error',
+                      style: const TextStyle(color: red),
+                    ),
+                  )
+                else
+                  _MonthGrid(
+                    year: year,
+                    month: month,
+                    events: _events,
+                    onEventTap: _showEventDetails,
+                    onEventDelete:
+                        canManage ? (e) => _remove(e) : null,
+                  ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -342,7 +350,7 @@ class _MonthGrid extends StatelessWidget {
 
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
-    final leadingBlanks = firstDay.weekday % 7; 
+    final leadingBlanks = firstDay.weekday % 7;
 
     return Column(
       children: [
