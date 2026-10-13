@@ -17,11 +17,17 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  bool _push = true;
-  bool _emailReminders = true;
+  
+  AppUser? _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _user = widget.user;
+  }
 
   String get _fullName {
-    final u = widget.user;
+    final u = _user;
     if (u != null && u.firstName.isNotEmpty) {
       return '${u.firstName} ${u.lastName}'.trim();
     }
@@ -29,13 +35,13 @@ class _ProfilePageState extends State<ProfilePage> {
   }
 
   String get _email {
-    final u = widget.user;
+    final u = _user;
     if (u != null && u.email.isNotEmpty) return u.email;
     return widget.role.email;
   }
 
   String get _initials {
-    final u = widget.user;
+    final u = _user;
     if (u == null) return widget.role.initials;
     final f = u.firstName.isNotEmpty ? u.firstName[0].toUpperCase() : '';
     final l = u.lastName.isNotEmpty ? u.lastName[0].toUpperCase() : '';
@@ -55,35 +61,238 @@ class _ProfilePageState extends State<ProfilePage> {
         Role.admin => 'ST-0042',
       };
 
-  void _editInfo() {
-    showFormModal(
-      context,
-      icon: Icons.person_outline_rounded,
-      title: 'Edit profile',
-      fields: const [
-        FieldSpec('Full name', Icons.badge_outlined),
-        FieldSpec('Email', Icons.mail_outline_rounded),
-        FieldSpec('Phone', Icons.phone_outlined, hint: '+63 900 000 0000'),
-      ],
-      submitLabel: 'Save changes',
-      toast: 'Profile saved (UI only for now)',
+  Future<void> _editInfo() async {
+    if (_user == null) {
+      showToast(context, 'No user loaded to edit');
+      return;
+    }
+
+    final firstCtrl = TextEditingController(text: _user!.firstName);
+    final lastCtrl = TextEditingController(text: _user!.lastName);
+    final emailCtrl = TextEditingController(text: _user!.email);
+    String error = '';
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Profile'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: firstCtrl,
+                  decoration: const InputDecoration(labelText: 'First name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: lastCtrl,
+                  decoration: const InputDecoration(labelText: 'Last name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: const InputDecoration(labelText: 'Email'),
+                ),
+                if (error.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child:
+                        Text(error, style: const TextStyle(color: Colors.red)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (firstCtrl.text.trim().isEmpty ||
+                          lastCtrl.text.trim().isEmpty ||
+                          emailCtrl.text.trim().isEmpty) {
+                        setDialogState(
+                            () => error = 'All fields are required');
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        await ApiService.updateUser(
+                          _user!.id,
+                          firstName: firstCtrl.text.trim(),
+                          lastName: lastCtrl.text.trim(),
+                          email: emailCtrl.text.trim(),
+                          role: _user!.role,
+                       
+                        );
+
+                        final fresh = await ApiService.getUsers();
+                        final match = fresh.firstWhere(
+                          (j) =>
+                              (j['_id'] ?? j['id']).toString() == _user!.id,
+                          orElse: () => <String, dynamic>{},
+                        );
+                        if (match.isNotEmpty && mounted) {
+                          setState(() {
+                            _user = AppUser.fromJson(match);
+                          });
+                        }
+
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (mounted) {
+                          showToast(context, 'Profile updated');
+                        }
+                      } catch (e) {
+                        setDialogState(() {
+                          error =
+                              e.toString().replaceFirst('Exception: ', '');
+                          saving = false;
+                        });
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  void _changePassword() {
-    showFormModal(
-      context,
-      icon: Icons.lock_reset_rounded,
-      title: 'Change password',
-      subtitle: 'Choose something you have not used before.',
-      fields: const [
-        FieldSpec('Current password', Icons.lock_outline_rounded, password: true),
-        FieldSpec('New password', Icons.lock_outline_rounded, password: true),
-        FieldSpec('Confirm new password', Icons.lock_outline_rounded,
-            password: true),
-      ],
-      submitLabel: 'Update password',
-      toast: 'Password updated (UI only for now)',
+  Future<void> _changePassword() async {
+    if (_user == null) {
+      showToast(context, 'No user loaded');
+      return;
+    }
+
+    final currentCtrl = TextEditingController();
+    final newCtrl = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    String error = '';
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Change Password'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: currentCtrl,
+                  obscureText: true,
+                  decoration:
+                      const InputDecoration(labelText: 'Current password'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: newCtrl,
+                  obscureText: true,
+                  decoration:
+                      const InputDecoration(labelText: 'New password'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: confirmCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                      labelText: 'Confirm new password'),
+                ),
+                if (error.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child:
+                        Text(error, style: const TextStyle(color: Colors.red)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (currentCtrl.text.isEmpty ||
+                          newCtrl.text.isEmpty ||
+                          confirmCtrl.text.isEmpty) {
+                        setDialogState(
+                            () => error = 'All fields are required');
+                        return;
+                      }
+                      if (newCtrl.text.length < 8 ||
+                          newCtrl.text.length > 16) {
+                        setDialogState(() => error =
+                            'Password must be 8 to 16 characters');
+                        return;
+                      }
+                      if (newCtrl.text != confirmCtrl.text) {
+                        setDialogState(
+                            () => error = 'New passwords do not match');
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        await ApiService.changePassword(
+                          userId: _user!.id,
+                          currentPassword: currentCtrl.text,
+                          newPassword: newCtrl.text,
+                        );
+
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        if (mounted) {
+                          showToast(context, 'Password updated');
+                        }
+                      } catch (e) {
+                        setDialogState(() {
+                          error =
+                              e.toString().replaceFirst('Exception: ', '');
+                          saving = false;
+                        });
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.blue,
+                foregroundColor: Colors.white,
+              ),
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Update Password'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -142,8 +351,6 @@ class _ProfilePageState extends State<ProfilePage> {
                 const Divider(height: 1, color: AppColors.line),
                 _InfoRow('Email', _email),
                 const Divider(height: 1, color: AppColors.line),
-                _InfoRow('Phone', '+63 912 345 6789'),
-                const Divider(height: 1, color: AppColors.line),
                 _InfoRow(_idLabel, _idValue),
               ],
             ),
@@ -154,34 +361,6 @@ class _ProfilePageState extends State<ProfilePage> {
             title: 'Change password',
             subtitle: 'Last changed 3 months ago',
             onTap: _changePassword,
-          ),
-          const SectionTitle('Account settings'),
-          AppCard(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Column(
-              children: [
-                SwitchListTile(
-                  value: _push,
-                  onChanged: (v) => setState(() => _push = v),
-                  title: const Text('Push notifications'),
-                  subtitle: const Text('Deadlines, grades and announcements'),
-                ),
-                const Divider(height: 1, color: AppColors.line),
-                SwitchListTile(
-                  value: _emailReminders,
-                  onChanged: (v) => setState(() => _emailReminders = v),
-                  title: const Text('Email reminders'),
-                  subtitle: const Text('A daily summary at 8:00 AM'),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
-          NavTile(
-            icon: Icons.language_rounded,
-            title: 'Language',
-            subtitle: 'English',
-            onTap: () => showToast(context, 'More languages come later'),
           ),
           const SizedBox(height: 14),
           GhostButton(label: 'Log out', onPressed: _logOut),

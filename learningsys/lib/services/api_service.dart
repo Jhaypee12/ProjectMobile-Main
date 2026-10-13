@@ -4,15 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  // Picks the correct host based on where the app is running.
+  
   static String get baseUrl {
-    // Chrome / web
     if (kIsWeb) return 'http://localhost:3000/api';
-
-    // Android emulator — localhost points at the emulator, not your PC
     if (Platform.isAndroid) return 'http://10.0.2.2:3000/api';
-
-    // iOS simulator, macOS, Windows, Linux
     return 'http://localhost:3000/api';
   }
 
@@ -29,6 +24,7 @@ class ApiService {
     return data;
   }
 
+  /* ---------------- AUTH ---------------- */
 
   static Future<Map<String, dynamic>> register(
       String firstName, String lastName, String email, String password) async {
@@ -56,6 +52,39 @@ class ApiService {
     return AppUser.fromJson(data);
   }
 
+  static Future<Map<String, dynamic>> changePassword({
+    required String userId,
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/change-password'),
+      headers: _headers,
+      body: jsonEncode({
+        'userId': userId,
+        'currentPassword': currentPassword,
+        'newPassword': newPassword,
+      }),
+    );
+    return _handle(res);
+  }
+
+  static Future<Map<String, dynamic>> resetPassword({
+    required String email,
+    required String newPassword,
+  }) async {
+    final res = await http.post(
+      Uri.parse('$baseUrl/auth/reset-password'),
+      headers: _headers,
+      body: jsonEncode({
+        'email': email,
+        'newPassword': newPassword,
+      }),
+    );
+    return _handle(res);
+  }
+
+  /* ---------------- USERS CRUD ---------------- */
 
   static Future<List<Map<String, dynamic>>> getUsers() async {
     final res = await http.get(Uri.parse('$baseUrl/auth'));

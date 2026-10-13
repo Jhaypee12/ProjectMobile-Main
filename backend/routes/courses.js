@@ -6,10 +6,14 @@ const router = express.Router();
 const courseSchema = new mongoose.Schema(
   {
     name: String,
+    code: String,
     instructor: String,
     description: String,
     grade: String,
     score: Number,
+    enrolledStudentIds: [
+      { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    ],
   },
   { collection: 'courses' }
 );
@@ -18,7 +22,10 @@ const Course = mongoose.model('Course', courseSchema);
 
 router.get('/', async (req, res) => {
   try {
-    const courses = await Course.find();
+    const courses = await Course.find().populate(
+      'enrolledStudentIds',
+      'firstName lastName email role'
+    );
     res.json(courses);
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -27,9 +34,23 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, instructor, description, grade, score } = req.body;
+    const {
+      name,
+      code,
+      instructor,
+      description,
+      grade,
+      score,
+      enrolledStudentIds,
+    } = req.body;
     const created = await Course.create({
-      name, instructor, description, grade, score,
+      name,
+      code,
+      instructor,
+      description,
+      grade,
+      score,
+      enrolledStudentIds: enrolledStudentIds ?? [],
     });
     res.status(201).json(created);
   } catch (e) {
@@ -39,10 +60,26 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { name, instructor, description, grade, score } = req.body;
+    const {
+      name,
+      code,
+      instructor,
+      description,
+      grade,
+      score,
+      enrolledStudentIds,
+    } = req.body;
     const updated = await Course.findByIdAndUpdate(
       req.params.id,
-      { name, instructor, description, grade, score },
+      {
+        name,
+        code,
+        instructor,
+        description,
+        grade,
+        score,
+        enrolledStudentIds: enrolledStudentIds ?? [],
+      },
       { new: true }
     );
     if (!updated) return res.status(404).json({ message: 'Not found' });

@@ -48,14 +48,17 @@ class LumenApp extends StatelessWidget {
         },
         '/profile': (context) {
           final args = ModalRoute.of(context)!.settings.arguments;
-         
+
           if (args is Map) {
             return ProfilePage(
               role: args['role'] as Role,
               user: args['user'] as AppUser?,
             );
           }
-          return ProfilePage(role: args as Role);
+          if (args is Role) {
+            return ProfilePage(role: args);
+          }
+          return const ProfilePage(role: Role.student);
         },
       },
     );

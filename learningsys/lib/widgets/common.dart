@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../services/api_service.dart';
 import '../theme.dart';
 
 void showToast(BuildContext context, String message) {
@@ -17,7 +18,6 @@ void showToast(BuildContext context, String message) {
     );
 }
 
-/// Logo + project title.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.light = false});
   final bool light;
@@ -196,9 +196,6 @@ class _AppTextFieldState extends State<AppTextField> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Auth screen layout: purple header + rounded sheet holding the form.
-// ---------------------------------------------------------------------------
 
 class AuthScaffold extends StatelessWidget {
   const AuthScaffold({
@@ -308,9 +305,6 @@ class AuthScaffold extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Modals (bottom sheets)
-// ---------------------------------------------------------------------------
 
 Future<T?> showAppModal<T>(BuildContext context, WidgetBuilder builder) {
   return showModalBottomSheet<T>(
@@ -428,7 +422,6 @@ class _OtpFieldState extends State<OtpField> {
   }
 }
 
-/// Used for both Login OTP and Register OTP.
 class OtpModal extends StatelessWidget {
   const OtpModal({
     super.key,
@@ -484,32 +477,59 @@ class ForgotPasswordModal extends StatefulWidget {
 }
 
 class _ForgotPasswordModalState extends State<ForgotPasswordModal> {
-  bool _sent = false;
+  final _emailCtrl = TextEditingController();
+  final _newCtrl = TextEditingController();
+  final _confirmCtrl = TextEditingController();
+  String _error = '';
+  bool _saving = false;
+
+  Future<void> _reset() async {
+    final email = _emailCtrl.text.trim();
+    final newPass = _newCtrl.text;
+    final confirm = _confirmCtrl.text;
+
+    if (email.isEmpty || newPass.isEmpty || confirm.isEmpty) {
+      setState(() => _error = 'All fields are required');
+      return;
+    }
+    if (newPass.length < 8 || newPass.length > 16) {
+      setState(() => _error = 'Password must be 8 to 16 characters');
+      return;
+    }
+    if (newPass != confirm) {
+      setState(() => _error = 'Passwords do not match');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
+      _error = '';
+    });
+
+    try {
+      await ApiService.resetPassword(email: email, newPassword: newPass);
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      showToast(context, 'Password reset — you can now log in');
+    } catch (e) {
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _saving = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    _newCtrl.dispose();
+    _confirmCtrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    if (_sent) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _ModalIcon(Icons.mark_email_read_outlined),
-          const SizedBox(height: 20),
-          Text('Check your inbox', style: text.headlineSmall),
-          const SizedBox(height: 8),
-          const Text(
-            'We sent a reset link to your email. It stays valid for 30 minutes.',
-            style: TextStyle(color: AppColors.muted, height: 1.5),
-          ),
-          const SizedBox(height: 24),
-          PrimaryButton(
-            label: 'Back to log in',
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-        ],
-      );
-    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -519,20 +539,41 @@ class _ForgotPasswordModalState extends State<ForgotPasswordModal> {
         Text('Reset your password', style: text.headlineSmall),
         const SizedBox(height: 8),
         const Text(
-          'Enter the email you signed up with and we will send you a link to choose a new password.',
+          'Enter the email you signed up with and pick a new password.',
           style: TextStyle(color: AppColors.muted, height: 1.5),
         ),
-        const SizedBox(height: 24),
-        const AppTextField(
+        const SizedBox(height: 20),
+        AppTextField(
           label: 'Email',
           hint: 'you@school.edu',
           icon: Icons.mail_outline_rounded,
           keyboardType: TextInputType.emailAddress,
+          controller: _emailCtrl,
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 14),
+        AppTextField(
+          label: 'New password',
+          hint: '8 to 16 characters',
+          icon: Icons.lock_outline_rounded,
+          isPassword: true,
+          controller: _newCtrl,
+        ),
+        const SizedBox(height: 14),
+        AppTextField(
+          label: 'Confirm new password',
+          hint: 'Type it again',
+          icon: Icons.lock_outline_rounded,
+          isPassword: true,
+          controller: _confirmCtrl,
+        ),
+        if (_error.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(_error, style: const TextStyle(color: AppColors.alert)),
+        ],
+        const SizedBox(height: 20),
         PrimaryButton(
-          label: 'Send reset link',
-          onPressed: () => setState(() => _sent = true),
+          label: _saving ? 'Resetting…' : 'Reset password',
+          onPressed: _saving ? null : _reset,
         ),
       ],
     );

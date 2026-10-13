@@ -66,6 +66,8 @@ class _AdminCoursesPageState extends State<AdminCoursesPage> {
             Text('Grade: ${c.grade}'),
             const SizedBox(height: 4),
             Text('Score: ${c.score}%'),
+            const SizedBox(height: 4),
+            Text('Enrolled: ${c.students.length}'),
             if (c.description.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(c.description),
@@ -186,9 +188,8 @@ class _AdminCoursesPageState extends State<AdminCoursesPage> {
                         await _refresh();
                       } catch (e) {
                         setDialogState(() {
-                          error = e
-                              .toString()
-                              .replaceFirst('Exception: ', '');
+                          error =
+                              e.toString().replaceFirst('Exception: ', '');
                           saving = false;
                         });
                       }
@@ -259,14 +260,15 @@ class _AdminCoursesPageState extends State<AdminCoursesPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Courses',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: darkText,
+                  const Expanded(
+                    child: Text(
+                      'Courses',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: darkText,
+                      ),
                     ),
                   ),
                   ElevatedButton.icon(
@@ -283,119 +285,230 @@ class _AdminCoursesPageState extends State<AdminCoursesPage> {
                 ],
               ),
               const SizedBox(height: 20),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(color: cardBorder),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Course Management',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: darkText,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    if (_loading)
-                      const Padding(
-                        padding: EdgeInsets.all(40),
-                        child:
-                            Center(child: CircularProgressIndicator()),
-                      )
-                    else if (_error != null)
-                      Text(
-                        'Could not load courses.\n$_error',
-                        style: const TextStyle(color: red),
-                      )
-                    else if (_courses.isEmpty)
-                      const Text('No courses yet.')
-                    else
-                      for (final c in _courses)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                c.name,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: darkText,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${c.instructor} • ${c.grade} (${c.score}%)',
-                                style: const TextStyle(
-                                    color: darkText, fontSize: 13),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children: [
-                                  OutlinedButton(
-                                    onPressed: () => _showDetails(c),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: purple,
-                                      side: const BorderSide(
-                                          color: purple),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child:
-                                        const Text('Course Information'),
-                                  ),
-                                  OutlinedButton(
-                                    onPressed: () =>
-                                        _showForm(existing: c),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: purple,
-                                      side: const BorderSide(
-                                          color: purple),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child: const Text('Edit'),
-                                  ),
-                                  ElevatedButton(
-                                    onPressed: () => _remove(c),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: red,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                    child: const Text('Delete'),
-                                  ),
-                                ],
-                              ),
-                              const Divider(
-                                  height: 24, color: cardBorder),
-                            ],
-                          ),
-                        ),
-                  ],
-                ),
-              ),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.all(40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_error != null)
+                Text(
+                  'Could not load courses.\n$_error',
+                  style: const TextStyle(color: red),
+                )
+              else if (_courses.isEmpty)
+                const Text('No courses yet.')
+              else
+                for (final c in _courses) ...[
+                  _CourseCard(
+                    course: c,
+                    onShowDetails: () => _showDetails(c),
+                    onEdit: () => _showForm(existing: c),
+                    onDelete: () => _remove(c),
+                  ),
+                  const SizedBox(height: 16),
+                ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+class _CourseCard extends StatefulWidget {
+  const _CourseCard({
+    required this.course,
+    required this.onShowDetails,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final _Course course;
+  final VoidCallback onShowDetails;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  State<_CourseCard> createState() => _CourseCardState();
+}
+
+class _CourseCardState extends State<_CourseCard> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = widget.course;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: cardBorder),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          c.name,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: darkText,
+                          ),
+                        ),
+                      ),
+                      Icon(
+                        _expanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        color: purple,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Instructor: ${c.instructor}  •  ${c.grade} (${c.score}%)',
+                    style: const TextStyle(color: darkText, fontSize: 13.5),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${c.students.length} student${c.students.length == 1 ? '' : 's'} enrolled',
+                    style: const TextStyle(color: darkText, fontSize: 12.5),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: _expanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(height: 1, color: cardBorder),
+                        const SizedBox(height: 14),
+                        Text(
+                          'Students (${c.students.length})',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: darkText,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        if (c.students.isEmpty)
+                          const Text(
+                            'No students enrolled yet.',
+                            style:
+                                TextStyle(color: darkText, fontSize: 13),
+                          )
+                        else
+                          for (final s in c.students)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: Icon(
+                                      Icons.circle,
+                                      size: 6,
+                                      color: purple,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          s.fullName.isEmpty
+                                              ? '(unnamed)'
+                                              : s.fullName,
+                                          style: const TextStyle(
+                                            color: darkText,
+                                            fontSize: 13.5,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                        Text(
+                                          s.email,
+                                          style: const TextStyle(
+                                            color: darkText,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            OutlinedButton(
+                              onPressed: widget.onShowDetails,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: purple,
+                                side: const BorderSide(color: purple),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text('Course Information'),
+                            ),
+                            OutlinedButton(
+                              onPressed: widget.onEdit,
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: purple,
+                                side: const BorderSide(color: purple),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text('Edit'),
+                            ),
+                            ElevatedButton(
+                              onPressed: widget.onDelete,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: red,
+                                foregroundColor: Colors.white,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                              ),
+                              child: const Text('Delete'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+        ],
       ),
     );
   }
@@ -408,6 +521,7 @@ class _Course {
   final String description;
   final String grade;
   final int score;
+  final List<_Student> students;
 
   _Course({
     required this.id,
@@ -416,16 +530,53 @@ class _Course {
     required this.description,
     required this.grade,
     required this.score,
+    required this.students,
   });
 
-  factory _Course.fromJson(Map<String, dynamic> json) => _Course(
+  factory _Course.fromJson(Map<String, dynamic> json) {
+    final rawEnrolled = json['enrolledStudentIds'];
+    final parsed = <_Student>[];
+    if (rawEnrolled is List) {
+      for (final item in rawEnrolled) {
+        if (item is Map) {
+         parsed.add(_Student.fromJson(Map<String, dynamic>.from(item)));
+        }
+      }
+    }
+
+    return _Course(
+      id: (json['_id'] ?? json['id'] ?? '').toString(),
+      name: json['name'] ?? 'Untitled',
+      instructor: json['instructor'] ?? 'Unknown',
+      description: json['description'] ?? '',
+      grade: json['grade'] ?? '-',
+      score: (json['score'] is int)
+          ? json['score'] as int
+          : int.tryParse('${json['score']}') ?? 0,
+      students: parsed,
+    );
+  }
+}
+
+class _Student {
+  final String id;
+  final String firstName;
+  final String lastName;
+  final String email;
+
+  _Student({
+    required this.id,
+    required this.firstName,
+    required this.lastName,
+    required this.email,
+  });
+
+  String get fullName => '$firstName $lastName'.trim();
+
+  factory _Student.fromJson(Map<String, dynamic> json) => _Student(
         id: (json['_id'] ?? json['id'] ?? '').toString(),
-        name: json['name'] ?? 'Untitled',
-        instructor: json['instructor'] ?? 'Unknown',
-        description: json['description'] ?? '',
-        grade: json['grade'] ?? '-',
-        score: (json['score'] is int)
-            ? json['score'] as int
-            : int.tryParse('${json['score']}') ?? 0,
+        firstName: json['firstName'] ?? '',
+        lastName: json['lastName'] ?? '',
+        email: json['email'] ?? '',
       );
 }
