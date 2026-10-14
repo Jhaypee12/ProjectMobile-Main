@@ -5,15 +5,18 @@ const router = express.Router();
 
 const eventSchema = new mongoose.Schema(
   {
+    course: { type: String, default: '' },
     title: { type: String, required: true },
-    type: { type: String, default: 'Event' },
-    date: { type: String, required: true }, 
+    section: { type: String, default: '' },
+    type: { type: String, default: 'Event' }, // Quiz / Assignment / Event
+    date: { type: String, required: true },   // "YYYY-MM-DD"
   },
   { collection: 'events' }
 );
 
 const Event = mongoose.model('Event', eventSchema);
 
+// GET all
 router.get('/', async (req, res) => {
   try {
     const items = await Event.find().sort({ date: 1, _id: 1 });
@@ -23,11 +26,14 @@ router.get('/', async (req, res) => {
   }
 });
 
+// CREATE
 router.post('/', async (req, res) => {
   try {
-    const { title, type, date } = req.body;
+    const { course, title, section, type, date } = req.body;
     const created = await Event.create({
+      course: course ?? '',
       title,
+      section: section ?? '',
       type: type ?? 'Event',
       date,
     });
@@ -37,12 +43,13 @@ router.post('/', async (req, res) => {
   }
 });
 
+// UPDATE
 router.put('/:id', async (req, res) => {
   try {
-    const { title, type, date } = req.body;
+    const { course, title, section, type, date } = req.body;
     const updated = await Event.findByIdAndUpdate(
       req.params.id,
-      { title, type, date },
+      { course, title, section, type, date },
       { new: true, runValidators: true }
     );
     if (!updated) return res.status(404).json({ message: 'Not found' });
@@ -52,6 +59,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE
 router.delete('/:id', async (req, res) => {
   try {
     const removed = await Event.findByIdAndDelete(req.params.id);

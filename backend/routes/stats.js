@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 
 const router = express.Router();
 
+// Use unique names so we don't clash with models registered in other route files.
 const Course = mongoose.model(
   'StatsCourse',
   new mongoose.Schema({}, { strict: false, collection: 'courses' })
@@ -20,21 +21,39 @@ const Assessment = mongoose.model(
   new mongoose.Schema({}, { strict: false, collection: 'assessments' })
 );
 
-
 router.get('/', async (req, res) => {
   try {
-    const coursesCount = await Course.countDocuments();
+    const { studentId } = req.query;
 
-    const grades = await Grade.find({}, 'score total');
-    let avg = 0;
-    if (grades.length > 0) {
-      const sum = grades.reduce((acc, g) => {
-        if (!g.total) return acc;
-        return acc + (g.score / g.total) * 100;
-      }, 0);
-      avg = sum / grades.length;
+    // --- Enrolled courses count ---
+    let coursesCount;
+    if (studentId) {
+      coursesCount = await Course.countDocuments({
+        enrolledStudentIds: new mongoose.Types.ObjectId(studentId),
+      });
+    } else {
+      coursesCount = await Course.countDocuments();
     }
 
+    // --- Average grade (score/total per grade, averaged) ---
+    const gradeQuery = studentId
+      ? { student: new mongoose.Types.ObjectId(studentId) }
+      : {};
+    const grades = await Grade.find(gradeQuery, 'score total');
+
+    let avg = 0;
+    if (grades.length > 0) {
+      let sum = 0;
+      let count = 0;
+      for (const g of grades) {
+        if (!g.total) continue;
+        sum += (g.score / g.total) * 100;
+        count++;
+      }
+      avg = count === 0 ? 0 : sum / count;
+    }
+
+    // --- Due this week ---
     const today = new Date();
     const in7Days = new Date();
     in7Days.setDate(today.getDate() + 7);

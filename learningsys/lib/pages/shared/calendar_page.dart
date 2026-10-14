@@ -19,15 +19,21 @@ class CalendarPage extends StatefulWidget {
 }
 
 class _CalendarPageState extends State<CalendarPage> {
-  List<_CalEvent> _events = [];
+  List<_CalAssessment> _assessments = [];
   bool _loading = true;
   Object? _error;
+
+  late int _year;
+  late int _month;
 
   bool get canManage => widget.role != Role.student;
 
   @override
   void initState() {
     super.initState();
+    final now = DateTime.now();
+    _year = now.year;
+    _month = now.month;
     _load();
   }
 
@@ -37,10 +43,10 @@ class _CalendarPageState extends State<CalendarPage> {
       _error = null;
     });
     try {
-      final raw = await ApiService.getEvents();
+      final raw = await ApiService.getAssessments();
       if (!mounted) return;
       setState(() {
-        _events = raw.map((j) => _CalEvent.fromJson(j)).toList();
+        _assessments = raw.map((j) => _CalAssessment.fromJson(j)).toList();
         _loading = false;
       });
     } catch (e) {
@@ -56,170 +62,58 @@ class _CalendarPageState extends State<CalendarPage> {
     await _load();
   }
 
-  Future<void> _showForm({_CalEvent? existing}) async {
-    final isEditing = existing != null;
-    final titleCtrl = TextEditingController(text: existing?.title ?? '');
-    final typeCtrl = TextEditingController(text: existing?.type ?? 'Assignment');
-    final dateCtrl = TextEditingController(text: existing?.date ?? '');
-    String error = '';
-    bool saving = false;
-
-    await showDialog(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(isEditing ? 'Edit Event' : 'Add Event'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Title'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: typeCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Type (Quiz / Assignment / Event)'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: dateCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Date (YYYY-MM-DD)'),
-                ),
-                if (error.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 12),
-                    child:
-                        Text(error, style: const TextStyle(color: red)),
-                  ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: saving ? null : () => Navigator.pop(dialogContext),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: saving
-                  ? null
-                  : () async {
-                      if (titleCtrl.text.trim().isEmpty ||
-                          dateCtrl.text.trim().isEmpty) {
-                        setDialogState(() =>
-                            error = 'Title and date are required');
-                        return;
-                      }
-
-                      final dateOk = RegExp(r'^\d{4}-\d{2}-\d{2}$')
-                          .hasMatch(dateCtrl.text.trim());
-                      if (!dateOk) {
-                        setDialogState(() =>
-                            error = 'Date must be YYYY-MM-DD');
-                        return;
-                      }
-                      setDialogState(() => saving = true);
-                      try {
-                        if (isEditing) {
-                          await ApiService.updateEvent(
-                            existing.id,
-                            title: titleCtrl.text.trim(),
-                            type: typeCtrl.text.trim().isEmpty
-                                ? 'Event'
-                                : typeCtrl.text.trim(),
-                            date: dateCtrl.text.trim(),
-                          );
-                        } else {
-                          await ApiService.createEvent(
-                            title: titleCtrl.text.trim(),
-                            type: typeCtrl.text.trim().isEmpty
-                                ? 'Event'
-                                : typeCtrl.text.trim(),
-                            date: dateCtrl.text.trim(),
-                          );
-                        }
-                        if (dialogContext.mounted) {
-                          Navigator.pop(dialogContext);
-                        }
-                        await _refresh();
-                      } catch (e) {
-                        setDialogState(() {
-                          error = e
-                              .toString()
-                              .replaceFirst('Exception: ', '');
-                          saving = false;
-                        });
-                      }
-                    },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: blue,
-                foregroundColor: Colors.white,
-              ),
-              child: saving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(isEditing ? 'Save' : 'Add'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _remove(_CalEvent e) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete Event'),
-        content: Text('Delete "${e.title}"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-    if (confirm != true) return;
-    try {
-      await ApiService.deleteEvent(e.id);
-      await _refresh();
-    } catch (err) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Delete failed: $err')),
-        );
+  void _prevMonth() {
+    setState(() {
+      if (_month == 1) {
+        _month = 12;
+        _year -= 1;
+      } else {
+        _month -= 1;
       }
-    }
+    });
   }
 
-  void _showEventDetails(_CalEvent e) {
+  void _nextMonth() {
+    setState(() {
+      if (_month == 12) {
+        _month = 1;
+        _year += 1;
+      } else {
+        _month += 1;
+      }
+    });
+  }
+
+  void _showDetails(_CalAssessment a) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
-        title: Text(e.title),
+        title: Text(a.name),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Type: ${e.type}'),
+            if (a.course.isNotEmpty) Text('Course: ${a.course}'),
+            if (a.section.isNotEmpty) Text('Section: ${a.section}'),
+            Text('Type: ${a.type}'),
             const SizedBox(height: 4),
-            Text('Date: ${e.date}'),
+            Text('Due: ${a.due}'),
+            if (a.status.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Text('Status: ${a.status}'),
+            ],
+            if (a.description.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(a.description),
+            ],
+            const SizedBox(height: 12),
+            const Text(
+              '(Manage on the Assessments page)',
+              style: TextStyle(
+                  fontStyle: FontStyle.italic,
+                  color: darkText,
+                  fontSize: 12),
+            ),
           ],
         ),
         actions: [
@@ -227,14 +121,6 @@ class _CalendarPageState extends State<CalendarPage> {
             onPressed: () => Navigator.pop(context),
             child: const Text('Close'),
           ),
-          if (canManage)
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showForm(existing: e);
-              },
-              child: const Text('Edit'),
-            ),
         ],
       ),
     );
@@ -242,12 +128,6 @@ class _CalendarPageState extends State<CalendarPage> {
 
   @override
   Widget build(BuildContext context) {
-    final baseDate = _events.isNotEmpty
-        ? (DateTime.tryParse(_events.first.date) ?? DateTime.now())
-        : DateTime.now();
-    final year = baseDate.year;
-    final month = baseDate.month;
-
     return Scaffold(
       backgroundColor: lightBlue,
       body: SafeArea(
@@ -259,37 +139,59 @@ class _CalendarPageState extends State<CalendarPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Text(
+                  'Calendar',
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: darkText,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Prev / Month / Next
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Calendar',
-                      style: TextStyle(
-                        fontSize: 32,
+                    OutlinedButton(
+                      onPressed: _prevMonth,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: purple,
+                        side: const BorderSide(color: purple),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                      ),
+                      child: const Text('Prev'),
+                    ),
+                    const SizedBox(width: 12),
+                    Text(
+                      _monthLabel(_year, _month),
+                      style: const TextStyle(
+                        fontSize: 16,
                         fontWeight: FontWeight.bold,
                         color: darkText,
                       ),
                     ),
-                    if (canManage)
-                      ElevatedButton.icon(
-                        onPressed: () => _showForm(),
-                        icon: const Icon(Icons.add, color: Colors.white),
-                        label: const Text(
-                          'Add',
-                          style: TextStyle(color: Colors.white),
+                    const SizedBox(width: 12),
+                    OutlinedButton(
+                      onPressed: _nextMonth,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: purple,
+                        side: const BorderSide(color: purple),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: blue,
-                        ),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
                       ),
+                      child: const Text('Next'),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  _monthLabel(year, month),
-                  style: const TextStyle(color: darkText, fontSize: 15),
-                ),
                 const SizedBox(height: 20),
+
                 if (_loading)
                   const Padding(
                     padding: EdgeInsets.all(40),
@@ -299,18 +201,17 @@ class _CalendarPageState extends State<CalendarPage> {
                   Padding(
                     padding: const EdgeInsets.all(20),
                     child: Text(
-                      'Could not load events.\n$_error',
+                      'Could not load calendar.\n$_error',
                       style: const TextStyle(color: red),
                     ),
                   )
                 else
                   _MonthGrid(
-                    year: year,
-                    month: month,
-                    events: _events,
-                    onEventTap: _showEventDetails,
-                    onEventDelete:
-                        canManage ? (e) => _remove(e) : null,
+                    year: _year,
+                    month: _month,
+                    assessments: _assessments,
+                    showSection: canManage,
+                    onTap: _showDetails,
                   ),
               ],
             ),
@@ -333,16 +234,16 @@ class _MonthGrid extends StatelessWidget {
   const _MonthGrid({
     required this.year,
     required this.month,
-    required this.events,
-    required this.onEventTap,
-    this.onEventDelete,
+    required this.assessments,
+    required this.showSection,
+    required this.onTap,
   });
 
   final int year;
   final int month;
-  final List<_CalEvent> events;
-  final ValueChanged<_CalEvent> onEventTap;
-  final ValueChanged<_CalEvent>? onEventDelete;
+  final List<_CalAssessment> assessments;
+  final bool showSection;
+  final ValueChanged<_CalAssessment> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -351,6 +252,7 @@ class _MonthGrid extends StatelessWidget {
     final firstDay = DateTime(year, month, 1);
     final daysInMonth = DateTime(year, month + 1, 0).day;
     final leadingBlanks = firstDay.weekday % 7;
+    final today = DateTime.now();
 
     return Column(
       children: [
@@ -385,9 +287,12 @@ class _MonthGrid extends StatelessWidget {
             for (var d = 1; d <= daysInMonth; d++)
               _DayBox(
                 day: d,
-                events: _eventsOnDay(d),
-                onEventTap: onEventTap,
-                onEventDelete: onEventDelete,
+                isToday: today.year == year &&
+                    today.month == month &&
+                    today.day == d,
+                assessments: _assessmentsOnDay(d),
+                showSection: showSection,
+                onTap: onTap,
               ),
           ],
         ),
@@ -395,25 +300,27 @@ class _MonthGrid extends StatelessWidget {
     );
   }
 
-  List<_CalEvent> _eventsOnDay(int day) {
+  List<_CalAssessment> _assessmentsOnDay(int day) {
     final prefix = '$year-${month.toString().padLeft(2, '0')}-'
         '${day.toString().padLeft(2, '0')}';
-    return events.where((e) => e.date == prefix).toList();
+    return assessments.where((a) => a.due == prefix).toList();
   }
 }
 
 class _DayBox extends StatelessWidget {
   const _DayBox({
     required this.day,
-    required this.events,
-    required this.onEventTap,
-    this.onEventDelete,
+    required this.isToday,
+    required this.assessments,
+    required this.showSection,
+    required this.onTap,
   });
 
   final int day;
-  final List<_CalEvent> events;
-  final ValueChanged<_CalEvent> onEventTap;
-  final ValueChanged<_CalEvent>? onEventDelete;
+  final bool isToday;
+  final List<_CalAssessment> assessments;
+  final bool showSection;
+  final ValueChanged<_CalAssessment> onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -421,7 +328,10 @@ class _DayBox extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: Colors.white,
-        border: Border.all(color: cardBorder),
+        border: Border.all(
+          color: isToday ? purple : cardBorder,
+          width: isToday ? 2 : 1,
+        ),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Column(
@@ -435,50 +345,87 @@ class _DayBox extends StatelessWidget {
               fontSize: 13,
             ),
           ),
-          for (final e in events)
-            GestureDetector(
-              onTap: () => onEventTap(e),
-              onLongPress: onEventDelete == null
-                  ? null
-                  : () => onEventDelete!(e),
-              child: Container(
-                margin: const EdgeInsets.only(top: 4),
-                padding: const EdgeInsets.all(3),
-                decoration: BoxDecoration(
-                  color: e.type.toLowerCase() == 'quiz' ? purple : blue,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  e.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 9),
-                ),
+          // Remaining vertical space — scrollable if too many entries.
+          Expanded(
+            child: SingleChildScrollView(
+              physics: const ClampingScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final a in assessments)
+                    GestureDetector(
+                      onTap: () => onTap(a),
+                      child: Container(
+                        margin: const EdgeInsets.only(top: 4),
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: a.color,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _label(a),
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 9),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
+          ),
         ],
       ),
     );
   }
+
+  // "Course - Name - Section"
+  String _label(_CalAssessment a) {
+    final parts = <String>[];
+    if (a.course.isNotEmpty) parts.add(a.course);
+    parts.add(a.name);
+    if (showSection && a.section.isNotEmpty) parts.add(a.section);
+    return parts.join(' - ');
+  }
 }
 
-class _CalEvent {
-  final String id;
-  final String title;
-  final String type;
-  final String date;
+// ---------------------------------------------------------------------------
+// Model — one assessment
+// ---------------------------------------------------------------------------
 
-  _CalEvent({
+class _CalAssessment {
+  final String id;
+  final String name;
+  final String course;
+  final String section;
+  final String type;
+  final String due;
+  final String status;
+  final String description;
+
+  _CalAssessment({
     required this.id,
-    required this.title,
+    required this.name,
+    required this.course,
+    required this.section,
     required this.type,
-    required this.date,
+    required this.due,
+    required this.status,
+    required this.description,
   });
 
-  factory _CalEvent.fromJson(Map<String, dynamic> json) => _CalEvent(
+  factory _CalAssessment.fromJson(Map<String, dynamic> json) => _CalAssessment(
         id: (json['_id'] ?? json['id'] ?? '').toString(),
-        title: json['title'] ?? '',
-        type: json['type'] ?? 'Event',
-        date: json['date'] ?? '',
+        name: json['name'] ?? '',
+        course: json['course'] ?? '',
+        section: json['section'] ?? '',
+        type: json['type'] ?? 'Assignment',
+        due: json['due'] ?? '',
+        status: json['status'] ?? '',
+        description: json['description'] ?? '',
       );
+
+  // Purple for quizzes, blue for assignments.
+  Color get color => type.toLowerCase() == 'quiz' ? purple : blue;
 }

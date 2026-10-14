@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 class ApiService {
-  
   static String get baseUrl {
     if (kIsWeb) return 'http://localhost:3000/api';
     if (Platform.isAndroid) return 'http://10.0.2.2:3000/api';
@@ -394,6 +393,8 @@ class ApiService {
     required String title,
     required String type,
     required String date,
+    String? course,
+    String? section,
   }) async {
     final res = await http.post(
       Uri.parse('$baseUrl/events'),
@@ -402,6 +403,8 @@ class ApiService {
         'title': title,
         'type': type,
         'date': date,
+        'course': course ?? '',
+        'section': section ?? '',
       }),
     );
     return _handle(res);
@@ -412,6 +415,8 @@ class ApiService {
     required String title,
     required String type,
     required String date,
+    String? course,
+    String? section,
   }) async {
     final res = await http.put(
       Uri.parse('$baseUrl/events/$id'),
@@ -420,6 +425,8 @@ class ApiService {
         'title': title,
         'type': type,
         'date': date,
+        'course': course ?? '',
+        'section': section ?? '',
       }),
     );
     return _handle(res);
@@ -432,8 +439,11 @@ class ApiService {
 
   /* ---------------- DASHBOARD STATS ---------------- */
 
-  static Future<Map<String, dynamic>> getStats() async {
-    final res = await http.get(Uri.parse('$baseUrl/stats'));
+  static Future<Map<String, dynamic>> getStats({String? studentId}) async {
+    final url = studentId != null
+        ? '$baseUrl/stats?studentId=$studentId'
+        : '$baseUrl/stats';
+    final res = await http.get(Uri.parse(url));
     final data = _handle(res);
     return data as Map<String, dynamic>;
   }

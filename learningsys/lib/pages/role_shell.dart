@@ -84,7 +84,7 @@ class _RoleShellState extends State<RoleShell> {
               onNavigate: _go,
             ),
           ),
-          const _Tab('My Courses', Icons.menu_book_rounded, MyCoursesPage()),
+           _Tab('My Courses', Icons.menu_book_rounded, MyCoursesPage(user: widget.user)),
           const _Tab('Assessments', Icons.assignment_rounded,
               AssessmentsPage(role: Role.teacher)),
           const _Tab('Gradebook', Icons.grading_rounded, GradebookPage()),

@@ -60,7 +60,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Future<_DashboardData> _load() async {
     final futures = <Future<dynamic>>[
-      ApiService.getStats(),
+      ApiService.getStats(
+        studentId:
+            widget.role == Role.student ? widget.user?.id : null,
+      ),
       ApiService.getCourses(),
       ApiService.getAssessments(),
       ApiService.getAnnouncements(),
@@ -79,10 +82,12 @@ class _DashboardPageState extends State<DashboardPage> {
     var courses = results[1] as List<Map<String, dynamic>>;
     var grades = results[4] as List<Map<String, dynamic>>;
 
+    // --- Teacher: only their own courses ---
     if (widget.role == Role.teacher) {
-      final myName = _greetingName;
+      final myName = _greetingName.toLowerCase();
       courses = courses
-          .where((c) => (c['instructor'] ?? '').toString() == myName)
+          .where((c) =>
+              (c['instructor'] ?? '').toString().toLowerCase() == myName)
           .toList();
 
       final myCourseNames = <String>{};
@@ -97,6 +102,23 @@ class _DashboardPageState extends State<DashboardPage> {
       grades = grades.where((g) {
         final gc = (g['course'] ?? '').toString().trim().toLowerCase();
         return myCourseNames.contains(gc) || myCourseCodes.contains(gc);
+      }).toList();
+    }
+
+    // --- Student: only courses they're enrolled in ---
+    if (widget.role == Role.student && widget.user != null) {
+      final myId = widget.user!.id;
+      courses = courses.where((c) {
+        final enrolled = c['enrolledStudentIds'];
+        if (enrolled is List) {
+          for (final item in enrolled) {
+            final id = item is Map
+                ? (item['_id'] ?? '').toString()
+                : item.toString();
+            if (id == myId) return true;
+          }
+        }
+        return false;
       }).toList();
     }
 
@@ -144,7 +166,11 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                     const SizedBox(height: 20),
-                    _WelcomeCard(name: _greetingName, email: _email),
+                    _WelcomeCard(
+                      name: _greetingName,
+                      email: _email,
+                      showEmail: widget.role != Role.student,
+                    ),
                     const SizedBox(height: 20),
                     if (loading)
                       const Padding(
@@ -185,6 +211,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Data holder
+// ---------------------------------------------------------------------------
 
 class _DashboardData {
   final Map<String, dynamic> stats;
@@ -206,10 +235,19 @@ class _DashboardData {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Welcome
+// ---------------------------------------------------------------------------
+
 class _WelcomeCard extends StatelessWidget {
-  const _WelcomeCard({required this.name, required this.email});
+  const _WelcomeCard({
+    required this.name,
+    required this.email,
+    this.showEmail = true,
+  });
   final String name;
   final String email;
+  final bool showEmail;
 
   @override
   Widget build(BuildContext context) {
@@ -232,11 +270,13 @@ class _WelcomeCard extends StatelessWidget {
               color: darkText,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            email,
-            style: const TextStyle(color: darkText, fontSize: 13),
-          ),
+          if (showEmail) ...[
+            const SizedBox(height: 4),
+            Text(
+              email,
+              style: const TextStyle(color: darkText, fontSize: 13),
+            ),
+          ],
           const SizedBox(height: 6),
           const Text(
             "Here's your overview for today.",
@@ -247,6 +287,10 @@ class _WelcomeCard extends StatelessWidget {
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reusable pieces
+// ---------------------------------------------------------------------------
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({required this.child});
@@ -361,6 +405,9 @@ class _StatCard extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ADMIN BODY
+// ---------------------------------------------------------------------------
 
 class _AdminBody extends StatelessWidget {
   const _AdminBody({required this.data, required this.onNavigate});
@@ -524,6 +571,9 @@ class _AdminBody extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// TEACHER BODY
+// ---------------------------------------------------------------------------
 
 class _TeacherBody extends StatelessWidget {
   const _TeacherBody({required this.data, required this.onNavigate});
@@ -533,10 +583,6 @@ class _TeacherBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final pending = data.grades
-        .where((g) => (g['feedback'] ?? '').toString().trim().isEmpty)
-        .toList();
-
     final upcoming = List<Map<String, dynamic>>.from(data.assessments)
       ..sort((a, b) =>
           (a['due'] ?? '').toString().compareTo((b['due'] ?? '').toString()));
@@ -554,33 +600,18 @@ class _TeacherBody extends StatelessWidget {
                 children: [
                   Expanded(child: _courseOverview()),
                   const SizedBox(width: 16),
-                  Expanded(child: _pendingCard(pending)),
+                  Expanded(child: _upcomingCard(upcomingShown)),
                 ],
               )
             : Column(
                 children: [
                   _courseOverview(),
                   const SizedBox(height: 16),
-                  _pendingCard(pending),
+                  _upcomingCard(upcomingShown),
                 ],
               );
 
-        final bottom = wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(child: _upcomingCard(upcomingShown)),
-                  const SizedBox(width: 16),
-                  Expanded(child: _recentCard(recentShown)),
-                ],
-              )
-            : Column(
-                children: [
-                  _upcomingCard(upcomingShown),
-                  const SizedBox(height: 16),
-                  _recentCard(recentShown),
-                ],
-              );
+        final bottom = _recentCard(recentShown);
 
         return Column(
           children: [
@@ -607,30 +638,6 @@ class _TeacherBody extends StatelessWidget {
               if (i > 0) const SizedBox(height: 10),
               _CourseRow(course: data.courses[i]),
             ],
-        ],
-      ),
-    );
-  }
-
-  Widget _pendingCard(List<Map<String, dynamic>> pending) {
-    return _SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _SectionHeader('Pending Submissions (${pending.length})'),
-          if (pending.isEmpty)
-            const Text('Nothing to grade.',
-                style: TextStyle(color: darkText, fontSize: 13))
-          else
-            for (var i = 0; i < pending.take(5).length; i++) ...[
-              if (i > 0) const SizedBox(height: 8),
-              _PendingRow(g: pending[i]),
-            ],
-          const SizedBox(height: 14),
-          _PrimarySmallButton(
-            label: 'OPEN GRADEBOOK',
-            onPressed: () => onNavigate(3),
-          ),
         ],
       ),
     );
@@ -689,42 +696,13 @@ class _CourseRow extends StatelessWidget {
     final name = (course['name'] ?? 'Untitled').toString();
     final code = (course['code'] ?? '').toString();
 
-    final enrolled = course['enrolledStudentIds'];
-    int count = 0;
-    if (enrolled is List) count = enrolled.length;
-
     return Text(
-      '$name ${code.isNotEmpty ? '($code)' : ''} - $count students',
+      code.isNotEmpty ? '$name ($code)' : name,
       style: const TextStyle(
         color: darkText,
         fontSize: 14,
         fontWeight: FontWeight.w600,
       ),
-    );
-  }
-}
-
-class _PendingRow extends StatelessWidget {
-  const _PendingRow({required this.g});
-  final Map<String, dynamic> g;
-
-  @override
-  Widget build(BuildContext context) {
-    final student = g['student'];
-    String studentName = 'Unknown';
-    if (student is Map) {
-      final f = student['firstName'] ?? '';
-      final l = student['lastName'] ?? '';
-      studentName = '$f $l'.trim();
-      if (studentName.isEmpty) studentName = '(unknown)';
-    }
-
-    final course = (g['course'] ?? '').toString();
-    final submission = (g['submission'] ?? '').toString();
-
-    return Text(
-      '$studentName - $submission ($course)',
-      style: const TextStyle(color: darkText, fontSize: 13),
     );
   }
 }
@@ -778,6 +756,9 @@ class _ActivityRow extends StatelessWidget {
   }
 }
 
+// ---------------------------------------------------------------------------
+// STUDENT BODY
+// ---------------------------------------------------------------------------
 
 class _StudentBody extends StatelessWidget {
   const _StudentBody({required this.data, required this.onNavigate});
