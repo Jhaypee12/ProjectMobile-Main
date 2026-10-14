@@ -14,6 +14,7 @@ app.use('/api/assessments', require('./routes/assessments'));
 app.use('/api/grades', require('./routes/grades'));
 app.use('/api/events', require('./routes/events'));
 app.use('/api/stats', require('./routes/stats'));
+app.use('/api/mycourses', require('./routes/mycourses'));
 
 mongoose
   .connect(process.env.MONGO_URI)

@@ -149,7 +149,6 @@ class _CalendarPageState extends State<CalendarPage> {
                 ),
                 const SizedBox(height: 16),
 
-                // Prev / Month / Next
                 Row(
                   children: [
                     OutlinedButton(
@@ -345,7 +344,7 @@ class _DayBox extends StatelessWidget {
               fontSize: 13,
             ),
           ),
-          // Remaining vertical space — scrollable if too many entries.
+
           Expanded(
             child: SingleChildScrollView(
               physics: const ClampingScrollPhysics(),
@@ -380,7 +379,6 @@ class _DayBox extends StatelessWidget {
     );
   }
 
-  // "Course - Name - Section"
   String _label(_CalAssessment a) {
     final parts = <String>[];
     if (a.course.isNotEmpty) parts.add(a.course);
@@ -390,9 +388,6 @@ class _DayBox extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Model — one assessment
-// ---------------------------------------------------------------------------
 
 class _CalAssessment {
   final String id;
@@ -426,6 +421,5 @@ class _CalAssessment {
         description: json['description'] ?? '',
       );
 
-  // Purple for quizzes, blue for assignments.
   Color get color => type.toLowerCase() == 'quiz' ? purple : blue;
 }

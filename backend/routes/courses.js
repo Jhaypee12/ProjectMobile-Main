@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 
 const router = express.Router();
 
+require('../models/User');
+
 const courseSchema = new mongoose.Schema(
   {
     name: String,
@@ -18,20 +20,70 @@ const courseSchema = new mongoose.Schema(
   { collection: 'courses' }
 );
 
-const Course = mongoose.model('Course', courseSchema);
+const Course =
+  mongoose.models.Course || mongoose.model('Course', courseSchema);
+
+const myCourseSchema = new mongoose.Schema(
+  {
+    name: String,
+    code: String,
+    description: String,
+    students: [
+      {
+        student: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+        section: String,
+        score: Number,
+        grade: String,
+      },
+    ],
+    modules: [{ title: String, content: String }],
+  },
+  { collection: 'mycourses' }
+);
+
+const MyCourse =
+  mongoose.models.MyCourse || mongoose.model('MyCourse', myCourseSchema);
 
 router.get('/', async (req, res) => {
   try {
-    const courses = await Course.find().populate(
-      'enrolledStudentIds',
-      'firstName lastName email role'
-    );
+    let courses = await Course.find().lean();
+
+    if (req.query.student) {
+      const studentId = req.query.student;
+
+      const myDocs = await MyCourse.find({
+        'students.student': new mongoose.Types.ObjectId(studentId),
+      }).lean();
+
+      const enrollment = {};
+      for (const m of myDocs) {
+        for (const s of (m.students || [])) {
+          const sid = s.student ? s.student.toString() : '';
+          if (sid === studentId) {
+            enrollment[m.name] = {
+              score: s.score ?? 0,
+              grade: s.grade ?? '',
+              section: s.section ?? '',
+            };
+          }
+        }
+      }
+
+      courses = courses
+        .filter((c) => enrollment[c.name] !== undefined)
+        .map((c) => ({
+          ...c,
+          ...enrollment[c.name],
+        }));
+    }
+
     res.json(courses);
   } catch (e) {
     res.status(500).json({ message: e.message });
   }
 });
 
+// CREATE
 router.post('/', async (req, res) => {
   try {
     const {
@@ -58,6 +110,7 @@ router.post('/', async (req, res) => {
   }
 });
 
+// UPDATE
 router.put('/:id', async (req, res) => {
   try {
     const {
@@ -89,6 +142,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// DELETE
 router.delete('/:id', async (req, res) => {
   try {
     const removed = await Course.findByIdAndDelete(req.params.id);

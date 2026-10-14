@@ -61,14 +61,12 @@ class _DashboardPageState extends State<DashboardPage> {
   Future<_DashboardData> _load() async {
     final futures = <Future<dynamic>>[
       ApiService.getStats(
-        studentId:
-            widget.role == Role.student ? widget.user?.id : null,
+        studentId: widget.role == Role.student ? widget.user?.id : null,
       ),
-      ApiService.getCourses(),
-      ApiService.getAssessments(),
-      ApiService.getAnnouncements(),
-      ApiService.getGrades().catchError((_) => <Map<String, dynamic>>[]),
-      ApiService.getEvents().catchError((_) => <Map<String, dynamic>>[]),
+      ApiService.getMyCourses().catchError((_) => <Map<String, dynamic>>[]),
+      ApiService.getAssessments().catchError((_) => <Map<String, dynamic>>[]),
+      ApiService.getAnnouncements().catchError((_) => <Map<String, dynamic>>[]),
+      ApiService.getCourses().catchError((_) => <Map<String, dynamic>>[]),
     ];
 
     if (widget.role == Role.admin) {
@@ -79,43 +77,38 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final results = await Future.wait(futures);
 
-    var courses = results[1] as List<Map<String, dynamic>>;
-    var grades = results[4] as List<Map<String, dynamic>>;
+    final myCoursesRaw = results[1] as List<Map<String, dynamic>>;
+    final assessments = results[2] as List<Map<String, dynamic>>;
+    final announcements = results[3] as List<Map<String, dynamic>>;
+    final allCourses = results[4] as List<Map<String, dynamic>>;
 
-    // --- Teacher: only their own courses ---
+    List<Map<String, dynamic>> myCourses = [];
+
     if (widget.role == Role.teacher) {
-      final myName = _greetingName.toLowerCase();
-      courses = courses
-          .where((c) =>
-              (c['instructor'] ?? '').toString().toLowerCase() == myName)
-          .toList();
+      final me = _greetingName.toLowerCase();
+      final teacherCourseNames = allCourses
+          .where(
+              (c) => (c['instructor'] ?? '').toString().toLowerCase() == me)
+          .map((c) => (c['name'] ?? '').toString().toLowerCase().trim())
+          .toSet();
 
-      final myCourseNames = <String>{};
-      final myCourseCodes = <String>{};
-      for (final c in courses) {
-        final n = (c['name'] ?? '').toString().trim().toLowerCase();
-        if (n.isNotEmpty) myCourseNames.add(n);
-        final code = (c['code'] ?? '').toString().trim().toLowerCase();
-        if (code.isNotEmpty) myCourseCodes.add(code);
-      }
-
-      grades = grades.where((g) {
-        final gc = (g['course'] ?? '').toString().trim().toLowerCase();
-        return myCourseNames.contains(gc) || myCourseCodes.contains(gc);
+      myCourses = myCoursesRaw.where((m) {
+        final name = (m['name'] ?? '').toString().toLowerCase().trim();
+        return teacherCourseNames.contains(name);
       }).toList();
-    }
-
-    // --- Student: only courses they're enrolled in ---
-    if (widget.role == Role.student && widget.user != null) {
+    } else if (widget.role == Role.student && widget.user != null) {
       final myId = widget.user!.id;
-      courses = courses.where((c) {
-        final enrolled = c['enrolledStudentIds'];
-        if (enrolled is List) {
-          for (final item in enrolled) {
-            final id = item is Map
-                ? (item['_id'] ?? '').toString()
-                : item.toString();
-            if (id == myId) return true;
+      myCourses = myCoursesRaw.where((m) {
+        final students = m['students'];
+        if (students is List) {
+          for (final s in students) {
+            if (s is Map) {
+              final sField = s['student'];
+              final id = sField is Map
+                  ? (sField['_id'] ?? '').toString()
+                  : sField.toString();
+              if (id == myId) return true;
+            }
           }
         }
         return false;
@@ -124,13 +117,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return _DashboardData(
       stats: results[0] as Map<String, dynamic>,
-      courses: courses,
-      assessments: results[2] as List<Map<String, dynamic>>,
-      announcements: results[3] as List<Map<String, dynamic>>,
-      grades: grades,
-      events: results[5] as List<Map<String, dynamic>>,
+      myCourses: myCourses,
+      assessments: assessments,
+      announcements: announcements,
+      allCourses: allCourses,
       users: widget.role == Role.admin
-          ? results[6] as List<Map<String, dynamic>>
+          ? results[5] as List<Map<String, dynamic>>
           : const [],
     );
   }
@@ -211,33 +203,24 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Data holder
-// ---------------------------------------------------------------------------
-
 class _DashboardData {
   final Map<String, dynamic> stats;
-  final List<Map<String, dynamic>> courses;
+  final List<Map<String, dynamic>> myCourses;
   final List<Map<String, dynamic>> assessments;
   final List<Map<String, dynamic>> announcements;
-  final List<Map<String, dynamic>> grades;
-  final List<Map<String, dynamic>> events;
+  final List<Map<String, dynamic>> allCourses;
   final List<Map<String, dynamic>> users;
 
   _DashboardData({
     required this.stats,
-    required this.courses,
+    required this.myCourses,
     required this.assessments,
     required this.announcements,
-    required this.grades,
-    required this.events,
+    required this.allCourses,
     required this.users,
   });
 }
 
-// ---------------------------------------------------------------------------
-// Welcome
-// ---------------------------------------------------------------------------
 
 class _WelcomeCard extends StatelessWidget {
   const _WelcomeCard({
@@ -288,9 +271,6 @@ class _WelcomeCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Reusable pieces
-// ---------------------------------------------------------------------------
 
 class _SectionCard extends StatelessWidget {
   const _SectionCard({required this.child});
@@ -405,9 +385,6 @@ class _StatCard extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// ADMIN BODY
-// ---------------------------------------------------------------------------
 
 class _AdminBody extends StatelessWidget {
   const _AdminBody({required this.data, required this.onNavigate});
@@ -449,7 +426,7 @@ class _AdminBody extends StatelessWidget {
             Expanded(
               child: _StatCard(
                 label: 'Total Courses',
-                value: '${data.courses.length}',
+                value: '${data.allCourses.length}',
                 background: Colors.white,
                 textColor: darkText,
               ),
@@ -463,14 +440,14 @@ class _AdminBody extends StatelessWidget {
                 children: [
                   Expanded(child: _teachersCard(teachers)),
                   const SizedBox(width: 16),
-                  Expanded(child: _coursesCard(data.courses)),
+                  Expanded(child: _coursesCard(data.allCourses)),
                 ],
               )
             : Column(
                 children: [
                   _teachersCard(teachers),
                   const SizedBox(height: 16),
-                  _coursesCard(data.courses),
+                  _coursesCard(data.allCourses),
                 ],
               );
 
@@ -571,9 +548,6 @@ class _AdminBody extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// TEACHER BODY
-// ---------------------------------------------------------------------------
 
 class _TeacherBody extends StatelessWidget {
   const _TeacherBody({required this.data, required this.onNavigate});
@@ -584,8 +558,11 @@ class _TeacherBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final upcoming = List<Map<String, dynamic>>.from(data.assessments)
-      ..sort((a, b) =>
-          (a['due'] ?? '').toString().compareTo((b['due'] ?? '').toString()));
+      ..sort((a, b) {
+        String norm(Map<String, dynamic> m) =>
+            (m['due'] ?? '').toString().replaceAll(' ', '');
+        return norm(a).compareTo(norm(b));
+      });
     final upcomingShown = upcoming.take(5).toList();
 
     final recentShown = data.announcements.take(3).toList();
@@ -630,13 +607,13 @@ class _TeacherBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _SectionHeader('Course Overview'),
-          if (data.courses.isEmpty)
+          if (data.myCourses.isEmpty)
             const Text('No courses assigned to you yet.',
                 style: TextStyle(color: darkText, fontSize: 13))
           else
-            for (var i = 0; i < data.courses.length; i++) ...[
+            for (var i = 0; i < data.myCourses.length; i++) ...[
               if (i > 0) const SizedBox(height: 10),
-              _CourseRow(course: data.courses[i]),
+              _CourseRow(course: data.myCourses[i]),
             ],
         ],
       ),
@@ -696,8 +673,14 @@ class _CourseRow extends StatelessWidget {
     final name = (course['name'] ?? 'Untitled').toString();
     final code = (course['code'] ?? '').toString();
 
+    int count = 0;
+    final students = course['students'];
+    if (students is List) count = students.length;
+
+    final label = code.isNotEmpty ? '$name ($code)' : name;
+
     return Text(
-      code.isNotEmpty ? '$name ($code)' : name,
+      '$label - $count student${count == 1 ? '' : 's'}',
       style: const TextStyle(
         color: darkText,
         fontSize: 14,
@@ -756,9 +739,6 @@ class _ActivityRow extends StatelessWidget {
   }
 }
 
-// ---------------------------------------------------------------------------
-// STUDENT BODY
-// ---------------------------------------------------------------------------
 
 class _StudentBody extends StatelessWidget {
   const _StudentBody({required this.data, required this.onNavigate});
@@ -768,13 +748,18 @@ class _StudentBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avg = (data.stats['averageGrade'] ?? 0);
+    final avgRaw = data.stats['averageGrade'] ?? 0;
+    final avg = avgRaw is num ? avgRaw.toStringAsFixed(2) : '0.00';
+
     final enrolled = (data.stats['enrolledCourses'] ?? 0);
     final due = (data.stats['dueThisWeek'] ?? 0);
 
     final upcoming = List<Map<String, dynamic>>.from(data.assessments)
-      ..sort((a, b) =>
-          (a['due'] ?? '').toString().compareTo((b['due'] ?? '').toString()));
+      ..sort((a, b) {
+        String norm(Map<String, dynamic> m) =>
+            (m['due'] ?? '').toString().replaceAll(' ', '');
+        return norm(a).compareTo(norm(b));
+      });
     final upcomingShown = upcoming.take(3).toList();
 
     return LayoutBuilder(
@@ -847,14 +832,14 @@ class _StudentBody extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const _SectionHeader('Enrolled Courses'),
-          if (data.courses.isEmpty)
+          if (data.myCourses.isEmpty)
             const Text('No courses yet.',
                 style: TextStyle(color: darkText, fontSize: 13))
           else
-            for (var i = 0; i < data.courses.length; i++) ...[
+            for (var i = 0; i < data.myCourses.length; i++) ...[
               if (i > 0) const SizedBox(height: 8),
               Text(
-                (data.courses[i]['name'] ?? 'Untitled').toString(),
+                (data.myCourses[i]['name'] ?? 'Untitled').toString(),
                 style: const TextStyle(color: darkText, fontSize: 14),
               ),
             ],

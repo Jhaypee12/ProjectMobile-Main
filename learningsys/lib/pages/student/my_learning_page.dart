@@ -9,7 +9,8 @@ const darkText = Color(0xFF1B1535);
 const cardBorder = Color(0xFFDFD7F0);
 
 class MyLearningPage extends StatefulWidget {
-  const MyLearningPage({super.key});
+  const MyLearningPage({super.key, this.user});
+  final AppUser? user;
 
   @override
   State<MyLearningPage> createState() => _MyLearningPageState();
@@ -25,7 +26,7 @@ class _MyLearningPageState extends State<MyLearningPage> {
   }
 
   Future<List<_Course>> _loadCourses() async {
-    final raw = await ApiService.getCourses();
+    final raw = await ApiService.getCourses(studentId: widget.user?.id);
     return raw.map((json) => _Course.fromJson(json)).toList();
   }
 
@@ -80,8 +81,10 @@ class _MyLearningPageState extends State<MyLearningPage> {
             return const Center(child: Text('No courses yet.'));
           }
 
-          final average = courses.map((c) => c.score).reduce((a, b) => a + b) /
-              courses.length;
+          final average = courses.isEmpty
+              ? 0.0
+              : courses.map((c) => c.score).reduce((a, b) => a + b) /
+                  courses.length;
 
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -92,18 +95,20 @@ class _MyLearningPageState extends State<MyLearningPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'My Learning',
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: darkText,
+                      const Expanded(
+                        child: Text(
+                          'My Learning',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.bold,
+                            color: darkText,
+                          ),
                         ),
                       ),
                       OutlinedButton(
-                        onPressed: () => _termGrades(context, courses, average),
+                        onPressed: () =>
+                            _termGrades(context, courses, average),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: purple,
                           side: const BorderSide(color: purple),
@@ -145,7 +150,7 @@ class _Course {
   factory _Course.fromJson(Map<String, dynamic> json) => _Course(
         name: json['name'] ?? 'Untitled course',
         instructor: json['instructor'] ?? 'Unknown',
-        grade: json['grade'] ?? '-',
+        grade: json['grade'] ?? '',
         score: (json['score'] is int)
             ? json['score'] as int
             : int.tryParse('${json['score']}') ?? 0,

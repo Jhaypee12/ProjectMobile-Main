@@ -18,7 +18,7 @@ class MyCoursesPage extends StatefulWidget {
 }
 
 class _MyCoursesPageState extends State<MyCoursesPage> {
-  List<_Course> _courses = [];
+  List<_TeacherCourse> _courses = [];
   bool _loading = true;
   Object? _error;
 
@@ -40,15 +40,34 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
       _error = null;
     });
     try {
-      final raw = await ApiService.getCourses();
-      final all = raw.map((j) => _Course.fromJson(j)).toList();
+
+      final results = await Future.wait([
+        ApiService.getCourses(),
+        ApiService.getMyCourses(),
+      ]);
+
+      final coursesRaw = results[0];
+      final mycoursesRaw = results[1];
 
       final me = _myFullName.toLowerCase();
-      final mine = me.isEmpty
-          ? all
-          : all
-              .where((c) => c.instructor.toLowerCase() == me)
+      final myCoursesFromList = me.isEmpty
+          ? <Map<String, dynamic>>[]
+          : coursesRaw
+              .where((c) =>
+                  (c['instructor'] ?? '').toString().toLowerCase() == me)
               .toList();
+
+      final myNames = myCoursesFromList
+          .map((c) => (c['name'] ?? '').toString().toLowerCase().trim())
+          .toSet();
+
+      final mine = <_TeacherCourse>[];
+      for (final m in mycoursesRaw) {
+        final name = (m['name'] ?? '').toString().toLowerCase().trim();
+        if (myNames.contains(name)) {
+          mine.add(_TeacherCourse.fromJson(m));
+        }
+      }
 
       if (!mounted) return;
       setState(() {
@@ -68,7 +87,7 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
     await _load();
   }
 
-  void _showInfo(_Course c) {
+  void _showInfo(_TeacherCourse c) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -81,12 +100,14 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
               Text('Code: ${c.code}'),
               const SizedBox(height: 4),
             ],
-            Text('Instructor: ${c.instructor}'),
-            const SizedBox(height: 4),
-            Text('Students enrolled: ${c.studentCount}'),
+            Text('Students enrolled: ${c.students.length}'),
             if (c.description.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(c.description),
+            ],
+            if (c.modules.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Modules: ${c.modules.length}'),
             ],
           ],
         ),
@@ -100,7 +121,7 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
     );
   }
 
-  Future<void> _showAnnounce(_Course c) async {
+  Future<void> _showAnnounce(_TeacherCourse c) async {
     final titleCtrl = TextEditingController();
     final msgCtrl = TextEditingController();
     String error = '';
@@ -260,24 +281,29 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Course card (no student list)
-// ---------------------------------------------------------------------------
 
-class _TeacherCourseCard extends StatelessWidget {
+class _TeacherCourseCard extends StatefulWidget {
   const _TeacherCourseCard({
     required this.course,
     required this.onInfo,
     required this.onAnnounce,
   });
 
-  final _Course course;
+  final _TeacherCourse course;
   final VoidCallback onInfo;
   final VoidCallback onAnnounce;
 
   @override
+  State<_TeacherCourseCard> createState() => _TeacherCourseCardState();
+}
+
+class _TeacherCourseCardState extends State<_TeacherCourseCard> {
+  bool _studentsExpanded = true;
+  bool _modulesExpanded = true;
+
+  @override
   Widget build(BuildContext context) {
-    final c = course;
+    final c = widget.course;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -287,7 +313,7 @@ class _TeacherCourseCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Purple banner
+
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -308,7 +334,7 @@ class _TeacherCourseCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${c.studentCount} student${c.studentCount == 1 ? '' : 's'} enrolled',
+                  '${c.students.length} student${c.students.length == 1 ? '' : 's'} enrolled',
                   style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
                 const SizedBox(height: 14),
@@ -317,7 +343,7 @@ class _TeacherCourseCard extends StatelessWidget {
                   runSpacing: 10,
                   children: [
                     ElevatedButton(
-                      onPressed: onInfo,
+                      onPressed: widget.onInfo,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: blue,
                         foregroundColor: Colors.white,
@@ -331,7 +357,7 @@ class _TeacherCourseCard extends StatelessWidget {
                       ),
                     ),
                     ElevatedButton(
-                      onPressed: onAnnounce,
+                      onPressed: widget.onAnnounce,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.white,
                         foregroundColor: purple,
@@ -350,54 +376,264 @@ class _TeacherCourseCard extends StatelessWidget {
             ),
           ),
 
-          // Description block
-          if (c.description.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Text(
-                c.description,
-                style: const TextStyle(color: darkText, fontSize: 13.5),
-              ),
+          _SectionToggle(
+            title: 'Students (${c.students.length})',
+            expanded: _studentsExpanded,
+            onTap: () =>
+                setState(() => _studentsExpanded = !_studentsExpanded),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            alignment: Alignment.topCenter,
+            child: _studentsExpanded
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    child: c.students.isEmpty
+                        ? const Text(
+                            'No students enrolled yet.',
+                            style: TextStyle(color: darkText, fontSize: 13),
+                          )
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              columnSpacing: 16,
+                              headingRowHeight: 36,
+                              dataRowHeight: 44,
+                              headingTextStyle: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: darkText,
+                                fontSize: 12.5,
+                              ),
+                              dataTextStyle: const TextStyle(
+                                color: darkText,
+                                fontSize: 12.5,
+                              ),
+                              columns: const [
+                                DataColumn(label: Text('Name')),
+                                DataColumn(label: Text('Email')),
+                                DataColumn(label: Text('Section')),
+                                DataColumn(label: Text('Score')),
+                                DataColumn(label: Text('Grade')),
+                              ],
+                              rows: [
+                                for (final s in c.students)
+                                  DataRow(cells: [
+                                    DataCell(Text(s.name)),
+                                    DataCell(Text(s.email)),
+                                    DataCell(Text(
+                                        s.section.isEmpty ? '—' : s.section)),
+                                    DataCell(Text('${s.score}%')),
+                                    DataCell(Text(
+                                        s.grade.isEmpty ? '—' : s.grade)),
+                                  ]),
+                              ],
+                            ),
+                          ),
+                  )
+                : const SizedBox(width: double.infinity),
+          ),
+
+          if (c.modules.isNotEmpty) ...[
+            const Divider(height: 1, color: cardBorder),
+            _SectionToggle(
+              title: 'Course Content (${c.modules.length})',
+              expanded: _modulesExpanded,
+              onTap: () =>
+                  setState(() => _modulesExpanded = !_modulesExpanded),
             ),
+            AnimatedSize(
+              duration: const Duration(milliseconds: 200),
+              alignment: Alignment.topCenter,
+              child: _modulesExpanded
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final m in c.modules)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    m.title,
+                                    style: const TextStyle(
+                                      color: darkText,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 13.5,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    m.content,
+                                    style: const TextStyle(
+                                      color: darkText,
+                                      fontSize: 12.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    )
+                  : const SizedBox(width: double.infinity),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-// ---------------------------------------------------------------------------
-// Model
-// ---------------------------------------------------------------------------
+class _SectionToggle extends StatelessWidget {
+  const _SectionToggle({
+    required this.title,
+    required this.expanded,
+    required this.onTap,
+  });
 
-class _Course {
+  final String title;
+  final bool expanded;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: darkText,
+                ),
+              ),
+            ),
+            Icon(
+              expanded
+                  ? Icons.expand_less_rounded
+                  : Icons.expand_more_rounded,
+              color: purple,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _TeacherCourse {
   final String id;
   final String name;
   final String code;
-  final String instructor;
   final String description;
-  final int studentCount;
+  final List<_EnrolledStudent> students;
+  final List<_Module> modules;
 
-  _Course({
+  _TeacherCourse({
     required this.id,
     required this.name,
     required this.code,
-    required this.instructor,
     required this.description,
-    required this.studentCount,
+    required this.students,
+    required this.modules,
   });
 
-  factory _Course.fromJson(Map<String, dynamic> json) {
-    final enrolled = json['enrolledStudentIds'];
-    int count = 0;
-    if (enrolled is List) count = enrolled.length;
+  factory _TeacherCourse.fromJson(Map<String, dynamic> json) {
+    final rawStudents = json['students'];
+    final parsedStudents = <_EnrolledStudent>[];
+    if (rawStudents is List) {
+      for (final s in rawStudents) {
+        if (s is Map) {
+          parsedStudents
+              .add(_EnrolledStudent.fromJson(Map<String, dynamic>.from(s)));
+        }
+      }
+    }
 
-    return _Course(
+    final rawModules = json['modules'];
+    final parsedModules = <_Module>[];
+    if (rawModules is List) {
+      for (final m in rawModules) {
+        if (m is Map) {
+          parsedModules.add(_Module.fromJson(Map<String, dynamic>.from(m)));
+        }
+      }
+    }
+
+    return _TeacherCourse(
       id: (json['_id'] ?? json['id'] ?? '').toString(),
       name: json['name'] ?? 'Untitled',
       code: json['code'] ?? '',
-      instructor: json['instructor'] ?? 'Unknown',
       description: json['description'] ?? '',
-      studentCount: count,
+      students: parsedStudents,
+      modules: parsedModules,
     );
   }
+}
+
+class _EnrolledStudent {
+  final String id;
+  final String name;
+  final String email;
+  final String section;
+  final int score;
+  final String grade;
+
+  _EnrolledStudent({
+    required this.id,
+    required this.name,
+    required this.email,
+    required this.section,
+    required this.score,
+    required this.grade,
+  });
+
+  factory _EnrolledStudent.fromJson(Map<String, dynamic> json) {
+    final studentField = json['student'];
+    String sid = '';
+    String name = '(unknown)';
+    String email = '';
+    if (studentField is Map) {
+      sid = (studentField['_id'] ?? '').toString();
+      final f = studentField['firstName'] ?? '';
+      final l = studentField['lastName'] ?? '';
+      name = '$f $l'.trim();
+      if (name.isEmpty) name = '(unknown)';
+      email = (studentField['email'] ?? '').toString();
+    } else if (studentField != null) {
+      sid = studentField.toString();
+    }
+
+    return _EnrolledStudent(
+      id: sid,
+      name: name,
+      email: email,
+      section: json['section'] ?? '',
+      score: (json['score'] is int)
+          ? json['score'] as int
+          : int.tryParse('${json['score']}') ?? 0,
+      grade: json['grade'] ?? '',
+    );
+  }
+}
+
+class _Module {
+  final String title;
+  final String content;
+
+  _Module({required this.title, required this.content});
+
+  factory _Module.fromJson(Map<String, dynamic> json) => _Module(
+        title: json['title'] ?? '',
+        content: json['content'] ?? '',
+      );
 }
