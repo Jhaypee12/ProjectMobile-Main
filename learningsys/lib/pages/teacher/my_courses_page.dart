@@ -22,12 +22,6 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
   bool _loading = true;
   Object? _error;
 
-  String get _myFullName {
-    final u = widget.user;
-    if (u == null) return '';
-    return '${u.firstName} ${u.lastName}'.trim();
-  }
-
   @override
   void initState() {
     super.initState();
@@ -40,34 +34,8 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
       _error = null;
     });
     try {
-
-      final results = await Future.wait([
-        ApiService.getCourses(),
-        ApiService.getMyCourses(),
-      ]);
-
-      final coursesRaw = results[0];
-      final mycoursesRaw = results[1];
-
-      final me = _myFullName.toLowerCase();
-      final myCoursesFromList = me.isEmpty
-          ? <Map<String, dynamic>>[]
-          : coursesRaw
-              .where((c) =>
-                  (c['instructor'] ?? '').toString().toLowerCase() == me)
-              .toList();
-
-      final myNames = myCoursesFromList
-          .map((c) => (c['name'] ?? '').toString().toLowerCase().trim())
-          .toSet();
-
-      final mine = <_TeacherCourse>[];
-      for (final m in mycoursesRaw) {
-        final name = (m['name'] ?? '').toString().toLowerCase().trim();
-        if (myNames.contains(name)) {
-          mine.add(_TeacherCourse.fromJson(m));
-        }
-      }
+      final raw = await ApiService.getMyCourses();
+      final mine = raw.map((j) => _TeacherCourse.fromJson(j)).toList();
 
       if (!mounted) return;
       setState(() {

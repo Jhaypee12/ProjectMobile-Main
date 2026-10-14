@@ -25,10 +25,19 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
   bool _loading = true;
   Object? _error;
 
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -54,6 +63,19 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
 
   Future<void> _refresh() async {
     await _load();
+  }
+
+  List<_Assessment> get _filtered {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return _items;
+    return _items.where((a) {
+      return a.name.toLowerCase().contains(q) ||
+          a.course.toLowerCase().contains(q) ||
+          a.type.toLowerCase().contains(q) ||
+          a.status.toLowerCase().contains(q) ||
+          a.section.toLowerCase().contains(q) ||
+          a.description.toLowerCase().contains(q);
+    }).toList();
   }
 
   void _showDetails(_Assessment a) {
@@ -275,6 +297,8 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final items = _filtered;
+
     return Scaffold(
       backgroundColor: lightBlue,
       body: SafeArea(
@@ -311,6 +335,40 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
                       ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _searchCtrl,
+                  onChanged: (v) => setState(() => _query = v),
+                  decoration: InputDecoration(
+                    hintText: 'Search assessments...',
+                    prefixIcon: const Icon(Icons.search, color: darkText),
+                    suffixIcon: _query.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.clear, color: darkText),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() => _query = '');
+                            },
+                          ),
+                    filled: true,
+                    fillColor: Colors.white,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 14),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: cardBorder),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: cardBorder),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: blue, width: 2),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 20),
                 Container(
                   padding: const EdgeInsets.all(20),
@@ -329,11 +387,15 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
                               'Could not load assessments.\n$_error',
                               style: const TextStyle(color: red),
                             )
-                          : _items.isEmpty
-                              ? const Text('No assessments yet.')
+                          : items.isEmpty
+                              ? Text(
+                                  _query.isEmpty
+                                      ? 'No assessments yet.'
+                                      : 'No assessments match "$_query".',
+                                )
                               : Column(
                                   children: [
-                                    for (final a in _items)
+                                    for (final a in items)
                                       Padding(
                                         padding: const EdgeInsets
                                             .symmetric(vertical: 8),
