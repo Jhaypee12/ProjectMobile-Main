@@ -18,6 +18,7 @@ class MyLearningPage extends StatefulWidget {
 
 class _MyLearningPageState extends State<MyLearningPage> {
   late Future<List<_Course>> _coursesFuture;
+  int _page = 0;
 
   @override
   void initState() {
@@ -33,6 +34,7 @@ class _MyLearningPageState extends State<MyLearningPage> {
   Future<void> _refresh() async {
     setState(() {
       _coursesFuture = _loadCourses();
+      _page = 0;
     });
     await _coursesFuture;
   }
@@ -81,10 +83,12 @@ class _MyLearningPageState extends State<MyLearningPage> {
             return const Center(child: Text('No courses yet.'));
           }
 
-          final average = courses.isEmpty
-              ? 0.0
-              : courses.map((c) => c.score).reduce((a, b) => a + b) /
-                  courses.length;
+          final total = courses.length;
+          if (_page >= total) _page = total - 1;
+          final current = courses[_page];
+
+          final average =
+              courses.map((c) => c.score).reduce((a, b) => a + b) / total;
 
           return RefreshIndicator(
             onRefresh: _refresh,
@@ -118,16 +122,74 @@ class _MyLearningPageState extends State<MyLearningPage> {
                     ],
                   ),
                   const SizedBox(height: 20),
-                  for (final c in courses) ...[
-                    _CourseCard(course: c),
-                    const SizedBox(height: 16),
-                  ],
+                  _CourseCard(course: current),
+                  const SizedBox(height: 20),
+                  _Pagination(
+                    page: _page,
+                    total: total,
+                    onPrev: () => setState(() => _page -= 1),
+                    onNext: () => setState(() => _page += 1),
+                  ),
                 ],
               ),
             ),
           );
         },
       ),
+    );
+  }
+}
+
+class _Pagination extends StatelessWidget {
+  const _Pagination({
+    required this.page,
+    required this.total,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  final int page;
+  final int total;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        OutlinedButton(
+          onPressed: page == 0 ? null : onPrev,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: purple,
+            side: const BorderSide(color: purple),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text('← Previous'),
+        ),
+        const SizedBox(width: 16),
+        Text(
+          'Page ${page + 1} of $total',
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: darkText,
+          ),
+        ),
+        const SizedBox(width: 16),
+        OutlinedButton(
+          onPressed: page >= total - 1 ? null : onNext,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: purple,
+            side: const BorderSide(color: purple),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text('Next →'),
+        ),
+      ],
     );
   }
 }
@@ -176,32 +238,33 @@ class _CourseCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            height: 80,
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(
+                horizontal: 16, vertical: 20),
             decoration: BoxDecoration(
               color: purple,
               borderRadius: BorderRadius.circular(12),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            course.name,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: darkText,
+            child: Text(
+              course.name,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 14),
           Text(
             'Instructor: ${course.instructor}',
             style: const TextStyle(color: darkText, fontSize: 14),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 4),
           Text(
-            'Grade: ${course.grade} (${course.score}%)',
+            'Grade: ${course.grade}  (${course.score}%)',
             style: const TextStyle(color: darkText, fontSize: 14),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(

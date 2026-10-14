@@ -21,6 +21,7 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
   List<_TeacherCourse> _courses = [];
   bool _loading = true;
   Object? _error;
+  int _page = 0;
 
   @override
   void initState() {
@@ -41,6 +42,9 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
       setState(() {
         _courses = mine;
         _loading = false;
+        if (_page >= mine.length && mine.isNotEmpty) {
+          _page = mine.length - 1;
+        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -53,6 +57,14 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
 
   Future<void> _refresh() async {
     await _load();
+  }
+
+  void _prevPage() {
+    if (_page > 0) setState(() => _page -= 1);
+  }
+
+  void _nextPage() {
+    if (_page < _courses.length - 1) setState(() => _page += 1);
   }
 
   void _showInfo(_TeacherCourse c) {
@@ -193,6 +205,9 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final total = _courses.length;
+    final current = total == 0 ? null : _courses[_page];
+
     return Scaffold(
       backgroundColor: lightBlue,
       body: SafeArea(
@@ -231,15 +246,20 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
                       style: TextStyle(color: darkText, fontSize: 14),
                     ),
                   )
-                else
-                  for (final c in _courses) ...[
-                    _TeacherCourseCard(
-                      course: c,
-                      onInfo: () => _showInfo(c),
-                      onAnnounce: () => _showAnnounce(c),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
+                else if (current != null) ...[
+                  _TeacherCourseCard(
+                    course: current,
+                    onInfo: () => _showInfo(current),
+                    onAnnounce: () => _showAnnounce(current),
+                  ),
+                  const SizedBox(height: 20),
+                  _Pagination(
+                    page: _page,
+                    total: total,
+                    onPrev: _prevPage,
+                    onNext: _nextPage,
+                  ),
+                ],
               ],
             ),
           ),
@@ -249,6 +269,59 @@ class _MyCoursesPageState extends State<MyCoursesPage> {
   }
 }
 
+class _Pagination extends StatelessWidget {
+  const _Pagination({
+    required this.page,
+    required this.total,
+    required this.onPrev,
+    required this.onNext,
+  });
+
+  final int page;
+  final int total;
+  final VoidCallback onPrev;
+  final VoidCallback onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        OutlinedButton(
+          onPressed: page == 0 ? null : onPrev,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: purple,
+            side: const BorderSide(color: purple),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text('← Previous'),
+        ),
+        const SizedBox(width: 16),
+        Text(
+          'Page ${page + 1} of $total',
+          style: const TextStyle(
+            fontWeight: FontWeight.w600,
+            color: darkText,
+          ),
+        ),
+        const SizedBox(width: 16),
+        OutlinedButton(
+          onPressed: page >= total - 1 ? null : onNext,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: purple,
+            side: const BorderSide(color: purple),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+          child: const Text('Next →'),
+        ),
+      ],
+    );
+  }
+}
 
 class _TeacherCourseCard extends StatefulWidget {
   const _TeacherCourseCard({
@@ -281,7 +354,6 @@ class _TeacherCourseCardState extends State<_TeacherCourseCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
@@ -496,7 +568,6 @@ class _SectionToggle extends StatelessWidget {
     );
   }
 }
-
 
 class _TeacherCourse {
   final String id;

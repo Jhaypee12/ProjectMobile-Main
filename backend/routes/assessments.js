@@ -3,6 +3,8 @@ const mongoose = require('mongoose');
 
 const router = express.Router();
 
+require('../models/User');
+
 const assessmentSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
@@ -16,11 +18,42 @@ const assessmentSchema = new mongoose.Schema(
   { collection: 'assessments' }
 );
 
-const Assessment = mongoose.model('Assessment', assessmentSchema);
+const Assessment =
+  mongoose.models.Assessment ||
+  mongoose.model('Assessment', assessmentSchema);
+
+const myCourseSchema = new mongoose.Schema(
+  {},
+  { strict: false, collection: 'mycourses' }
+);
+
+const MyCourse =
+  mongoose.models.MyCourse || mongoose.model('MyCourse', myCourseSchema);
 
 router.get('/', async (req, res) => {
   try {
-    const items = await Assessment.find().sort({ due: 1, _id: -1 });
+    let items = await Assessment.find()
+      .sort({ due: 1, _id: -1 })
+      .lean();
+
+    if (req.query.student) {
+      const studentId = req.query.student;
+
+      const myDocs = await MyCourse.find({
+        'students.student': new mongoose.Types.ObjectId(studentId),
+      }).lean();
+
+      const myCourseNames = new Set();
+      for (const m of myDocs) {
+        if (m.name) myCourseNames.add(m.name.toLowerCase().trim());
+      }
+
+      items = items.filter((a) => {
+        if (!a.course) return false;
+        return myCourseNames.has(a.course.toLowerCase().trim());
+      });
+    }
+
     res.json(items);
   } catch (e) {
     res.status(500).json({ message: e.message });
@@ -29,7 +62,8 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, course, type, due, status, description, section } = req.body;
+    const { name, course, type, due, status, description, section } =
+      req.body;
     const created = await Assessment.create({
       name,
       course: course ?? '',
@@ -47,7 +81,8 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { name, course, type, due, status, description, section } = req.body;
+    const { name, course, type, due, status, description, section } =
+      req.body;
     const updated = await Assessment.findByIdAndUpdate(
       req.params.id,
       { name, course, type, due, status, description, section },

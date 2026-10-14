@@ -30,19 +30,17 @@ router.get('/', async (req, res) => {
 
     let myEnrollments = [];
     if (studentId) {
-      const courses = await MyCourse.find({
+      const myDocs = await MyCourse.find({
         'students.student': new mongoose.Types.ObjectId(studentId),
-      });
+      }).lean();
 
-      for (const c of courses) {
-        for (const s of (c.students || [])) {
+      for (const m of myDocs) {
+        for (const s of (m.students || [])) {
           const sid = s.student ? s.student.toString() : '';
           if (sid === studentId) {
             myEnrollments.push({
-              courseName: c.name,
+              courseName: m.name || '',
               score: Number(s.score) || 0,
-              section: s.section || '',
-              grade: s.grade || '',
             });
           }
         }
@@ -56,7 +54,6 @@ router.get('/', async (req, res) => {
         avg = sum / myEnrollments.length;
       }
     } else {
-      
       const grades = await Grade.find({}, 'score total');
       if (grades.length > 0) {
         let sum = 0;
@@ -70,12 +67,9 @@ router.get('/', async (req, res) => {
       }
     }
 
-    let coursesCount;
-    if (studentId) {
-      coursesCount = myEnrollments.length;
-    } else {
-      coursesCount = await Course.countDocuments();
-    }
+    const coursesCount = studentId
+      ? myEnrollments.length
+      : await Course.countDocuments();
 
     const today = new Date();
     const in7 = new Date();
@@ -84,15 +78,19 @@ router.get('/', async (req, res) => {
     const in7Str = in7.toISOString().split('T')[0];
 
     let dueCount = 0;
-
     if (studentId) {
       if (myEnrollments.length > 0) {
-        const myNames = myEnrollments.map((e) => e.courseName);
-  
-        dueCount = await Assessment.countDocuments({
-          course: { $in: myNames },
+    
+        const lowerNames = myEnrollments.map((e) =>
+          e.courseName.toLowerCase().trim()
+        );
+        const all = await Assessment.find({
           due: { $gte: todayStr, $lte: in7Str },
         });
+        dueCount = all.filter((a) => {
+          if (!a.course) return false;
+          return lowerNames.includes(a.course.toLowerCase().trim());
+        }).length;
       }
     } else {
       const upcomingAssessments = await Assessment.countDocuments({

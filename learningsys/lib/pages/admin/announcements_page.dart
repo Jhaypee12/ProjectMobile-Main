@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../role.dart';
 import '../../services/api_service.dart';
 
 const purple = Color(0xFF5B27C9);
@@ -10,8 +11,9 @@ const cardBorder = Color(0xFFDFD7F0);
 const red = Color(0xFFD32F2F);
 
 class AnnouncementsPage extends StatefulWidget {
-  const AnnouncementsPage({super.key, this.canManage = true});
+  const AnnouncementsPage({super.key, this.canManage = true, this.role});
   final bool canManage;
+  final Role? role;
 
   @override
   State<AnnouncementsPage> createState() => _AnnouncementsPageState();
@@ -21,6 +23,15 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
   List<_Announcement> _items = [];
   bool _loading = true;
   Object? _error;
+
+  bool get _isAdmin => widget.role == Role.admin;
+  bool get _isTeacher => widget.role == Role.teacher;
+
+  bool _canEditAnnouncement(_Announcement a) {
+    if (_isAdmin) return true;
+    if (_isTeacher) return a.course != 'ALL'; 
+    return false;
+  }
 
   @override
   void initState() {
@@ -64,8 +75,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
           children: [
             Text(a.message),
             const SizedBox(height: 12),
-            Text('Course: ${a.course}'),
-            if (a.section.isNotEmpty) Text('Section: ${a.section}'),
+            Text('Course: ${a.course == 'ALL' ? 'All students' : a.course}'),
             const SizedBox(height: 4),
             Text('Posted: ${a.date}'),
           ],
@@ -80,12 +90,10 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
     );
   }
 
-  Future<void> _showForm({_Announcement? existing}) async {
-    final isEditing = existing != null;
-    final titleCtrl = TextEditingController(text: existing?.title ?? '');
-    final messageCtrl = TextEditingController(text: existing?.message ?? '');
-    final courseCtrl = TextEditingController(text: existing?.course ?? 'ALL');
-    final sectionCtrl = TextEditingController(text: existing?.section ?? '');
+  Future<void> _showNewForm() async {
+    final courseCtrl = TextEditingController(text: 'ALL');
+    final titleCtrl = TextEditingController();
+    final messageCtrl = TextEditingController();
     String error = '';
     bool saving = false;
 
@@ -93,11 +101,19 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: Text(isEditing ? 'Edit Announcement' : 'Post Announcement'),
+          title: const Text('New Announcement'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                TextField(
+                  controller: courseCtrl,
+                  decoration: const InputDecoration(
+                    labelText:
+                        'Course (leave ALL to broadcast to everyone)',
+                  ),
+                ),
+                const SizedBox(height: 12),
                 TextField(
                   controller: titleCtrl,
                   decoration: const InputDecoration(labelText: 'Title'),
@@ -106,26 +122,14 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                 TextField(
                   controller: messageCtrl,
                   maxLines: 4,
-                  decoration: const InputDecoration(labelText: 'Message'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: courseCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Course (use "ALL" for everyone)',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: sectionCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Section (optional)',
-                  ),
+                  decoration:
+                      const InputDecoration(labelText: 'Message'),
                 ),
                 if (error.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 12),
-                    child: Text(error, style: const TextStyle(color: red)),
+                    child: Text(error,
+                        style: const TextStyle(color: red)),
                   ),
               ],
             ),
@@ -141,8 +145,8 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                   : () async {
                       if (titleCtrl.text.trim().isEmpty ||
                           messageCtrl.text.trim().isEmpty) {
-                        setDialogState(
-                            () => error = 'Title and message are required');
+                        setDialogState(() =>
+                            error = 'Title and message are required');
                         return;
                       }
                       setDialogState(() => saving = true);
@@ -151,28 +155,15 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                             .toIso8601String()
                             .split('T')
                             .first;
-                        if (isEditing) {
-                          await ApiService.updateAnnouncement(
-                            existing.id,
-                            title: titleCtrl.text.trim(),
-                            message: messageCtrl.text.trim(),
-                            course: courseCtrl.text.trim().isEmpty
-                                ? 'ALL'
-                                : courseCtrl.text.trim(),
-                            section: sectionCtrl.text.trim(),
-                            date: today,
-                          );
-                        } else {
-                          await ApiService.createAnnouncement(
-                            title: titleCtrl.text.trim(),
-                            message: messageCtrl.text.trim(),
-                            course: courseCtrl.text.trim().isEmpty
-                                ? 'ALL'
-                                : courseCtrl.text.trim(),
-                            section: sectionCtrl.text.trim(),
-                            date: today,
-                          );
-                        }
+                        await ApiService.createAnnouncement(
+                          title: titleCtrl.text.trim(),
+                          message: messageCtrl.text.trim(),
+                          course: courseCtrl.text.trim().isEmpty
+                              ? 'ALL'
+                              : courseCtrl.text.trim(),
+                          section: '',
+                          date: today,
+                        );
                         if (dialogContext.mounted) {
                           Navigator.pop(dialogContext);
                         }
@@ -197,7 +188,99 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                       child: CircularProgressIndicator(
                           strokeWidth: 2, color: Colors.white),
                     )
-                  : Text(isEditing ? 'Save' : 'Post'),
+                  : const Text('Post'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showEditForm(_Announcement a) async {
+    final titleCtrl = TextEditingController(text: a.title);
+    final messageCtrl = TextEditingController(text: a.message);
+    String error = '';
+    bool saving = false;
+
+    await showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Announcement'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: titleCtrl,
+                  decoration: const InputDecoration(labelText: 'Title'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: messageCtrl,
+                  maxLines: 4,
+                  decoration:
+                      const InputDecoration(labelText: 'Message'),
+                ),
+                if (error.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(error,
+                        style: const TextStyle(color: red)),
+                  ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: saving
+                  ? null
+                  : () async {
+                      if (titleCtrl.text.trim().isEmpty ||
+                          messageCtrl.text.trim().isEmpty) {
+                        setDialogState(() =>
+                            error = 'Title and message are required');
+                        return;
+                      }
+                      setDialogState(() => saving = true);
+                      try {
+                        await ApiService.updateAnnouncement(
+                          a.id,
+                          title: titleCtrl.text.trim(),
+                          message: messageCtrl.text.trim(),
+                          course: a.course,
+                          section: a.section,
+                          date: a.date,
+                        );
+                        if (dialogContext.mounted) {
+                          Navigator.pop(dialogContext);
+                        }
+                        await _refresh();
+                      } catch (e) {
+                        setDialogState(() {
+                          error = e
+                              .toString()
+                              .replaceFirst('Exception: ', '');
+                          saving = false;
+                        });
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: blue,
+                foregroundColor: Colors.white,
+              ),
+              child: saving
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Save Changes'),
             ),
           ],
         ),
@@ -222,7 +305,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
               backgroundColor: red,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Remove'),
+            child: const Text('Yes, Remove'),
           ),
         ],
       ),
@@ -252,22 +335,23 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'Announcements',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                      color: darkText,
+                  const Expanded(
+                    child: Text(
+                      'Announcements',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: darkText,
+                      ),
                     ),
                   ),
-                  if (widget.canManage)
+                  if (_isAdmin)
                     ElevatedButton.icon(
-                      onPressed: () => _showForm(),
+                      onPressed: _showNewForm,
                       icon: const Icon(Icons.add, color: Colors.white),
                       label: const Text(
-                        'Post',
+                        'Add Announcement',
                         style: TextStyle(color: Colors.white),
                       ),
                       style: ElevatedButton.styleFrom(
@@ -298,8 +382,7 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                     SizedBox(height: 6),
                     Text(
                       'Updates and notices from your courses.',
-                      style:
-                          TextStyle(color: Colors.white, fontSize: 14),
+                      style: TextStyle(color: Colors.white, fontSize: 14),
                     ),
                   ],
                 ),
@@ -342,65 +425,82 @@ class _AnnouncementsPageState extends State<AnnouncementsPage> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                a.title,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: darkText,
-                                  fontSize: 15,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                '${a.course} • ${a.date}',
-                                style: const TextStyle(
-                                    color: darkText, fontSize: 13),
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
+                              Row(
+                                crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                 children: [
-                                  ElevatedButton(
-                                    onPressed: () => _showDetails(a),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: blue,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                            BorderRadius.circular(12),
-                                      ),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          a.title,
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: darkText,
+                                            fontSize: 15,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          a.course == 'ALL'
+                                              ? a.message
+                                              : '${a.course} - ${a.message}',
+                                          style: const TextStyle(
+                                              color: darkText,
+                                              fontSize: 13),
+                                        ),
+                                      ],
                                     ),
-                                    child: const Text('Details'),
                                   ),
-                                  if (widget.canManage) ...[
-                                    OutlinedButton(
-                                      onPressed: () =>
-                                          _showForm(existing: a),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: purple,
-                                        side: const BorderSide(
-                                            color: purple),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                  const SizedBox(width: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    children: [
+                                      ElevatedButton(
+                                        onPressed: () =>
+                                            _showDetails(a),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: blue,
+                                          foregroundColor: Colors.white,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
                                         ),
+                                        child: const Text('Details'),
                                       ),
-                                      child: const Text('Edit'),
-                                    ),
-                                    ElevatedButton(
-                                      onPressed: () => _remove(a),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: red,
-                                        foregroundColor: Colors.white,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                      if (_canEditAnnouncement(a)) ...[
+                                        OutlinedButton(
+                                          onPressed: () =>
+                                              _showEditForm(a),
+                                          style: OutlinedButton.styleFrom(
+                                            foregroundColor: purple,
+                                            side: const BorderSide(
+                                                color: purple),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                          child: const Text('Edit'),
                                         ),
-                                      ),
-                                      child: const Text('Remove'),
-                                    ),
-                                  ],
+                                        ElevatedButton(
+                                          onPressed: () => _remove(a),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: red,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                          child: const Text('Remove'),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ],
                               ),
                               const Divider(

@@ -23,7 +23,6 @@ class ApiService {
     return data;
   }
 
-
   static Future<Map<String, dynamic>> register(
       String firstName, String lastName, String email, String password) async {
     final res = await http.post(
@@ -204,6 +203,7 @@ class ApiService {
     return data.cast<Map<String, dynamic>>();
   }
 
+
   static Future<List<Map<String, dynamic>>> getAnnouncements() async {
     final res = await http.get(Uri.parse('$baseUrl/announcements'));
     final data = _handle(res) as List;
@@ -259,8 +259,13 @@ class ApiService {
   }
 
 
-  static Future<List<Map<String, dynamic>>> getAssessments() async {
-    final res = await http.get(Uri.parse('$baseUrl/assessments'));
+  static Future<List<Map<String, dynamic>>> getAssessments({
+    String? studentId,
+  }) async {
+    final url = studentId != null
+        ? '$baseUrl/assessments?student=$studentId'
+        : '$baseUrl/assessments';
+    final res = await http.get(Uri.parse(url));
     final data = _handle(res) as List;
     return data.cast<Map<String, dynamic>>();
   }
@@ -387,8 +392,13 @@ class ApiService {
   }
 
 
-  static Future<List<Map<String, dynamic>>> getEvents() async {
-    final res = await http.get(Uri.parse('$baseUrl/events'));
+  static Future<List<Map<String, dynamic>>> getEvents({
+    String? studentId,
+  }) async {
+    final url = studentId != null
+        ? '$baseUrl/events?student=$studentId'
+        : '$baseUrl/events';
+    final res = await http.get(Uri.parse(url));
     final data = _handle(res) as List;
     return data.cast<Map<String, dynamic>>();
   }
@@ -451,7 +461,6 @@ class ApiService {
     return data as Map<String, dynamic>;
   }
 }
-
 
 class AppUser {
   final String id;

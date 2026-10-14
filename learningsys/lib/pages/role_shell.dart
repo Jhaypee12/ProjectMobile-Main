@@ -26,7 +26,6 @@ class RoleShell extends StatefulWidget {
   const RoleShell({super.key, required this.role, this.user});
 
   final Role role;
-
   final AppUser? user;
 
   @override
@@ -54,6 +53,26 @@ class _RoleShellState extends State<RoleShell> {
     );
   }
 
+  void _openAnnouncements() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: AppColors.paper,
+          appBar: AppBar(
+            backgroundColor: AppColors.paper,
+            surfaceTintColor: Colors.transparent,
+            foregroundColor: AppColors.ink,
+            title: const Text('Announcements'),
+          ),
+          body: AnnouncementsPage(
+            canManage: widget.role != Role.student,
+            role: widget.role,
+          ),
+        ),
+      ),
+    );
+  }
+
   List<_Tab> _tabs() {
     switch (widget.role) {
       case Role.student:
@@ -67,11 +86,15 @@ class _RoleShellState extends State<RoleShell> {
               onNavigate: _go,
             ),
           ),
-          const _Tab('My Learning', Icons.school_rounded, MyLearningPage()),
-          const _Tab('Assessments', Icons.assignment_rounded,
-              AssessmentsPage(role: Role.student)),
-          const _Tab('Calendar', Icons.calendar_month_rounded,
-              CalendarPage(role: Role.student)),
+          _Tab(
+            'My Learning',
+            Icons.school_rounded,
+            MyLearningPage(user: widget.user),
+          ),
+          _Tab('Assessments', Icons.assignment_rounded,
+              AssessmentsPage(role: Role.student, user: widget.user)),
+          _Tab('Calendar', Icons.calendar_month_rounded,
+              CalendarPage(role: Role.student, user: widget.user)),
         ];
       case Role.teacher:
         return [
@@ -84,12 +107,16 @@ class _RoleShellState extends State<RoleShell> {
               onNavigate: _go,
             ),
           ),
-           _Tab('My Courses', Icons.menu_book_rounded, MyCoursesPage(user: widget.user)),
+          _Tab(
+            'My Courses',
+            Icons.menu_book_rounded,
+            MyCoursesPage(user: widget.user),
+          ),
           const _Tab('Assessments', Icons.assignment_rounded,
               AssessmentsPage(role: Role.teacher)),
           const _Tab('Gradebook', Icons.grading_rounded, GradebookPage()),
-          const _Tab('Calendar', Icons.calendar_month_rounded,
-              CalendarPage(role: Role.teacher)),
+          _Tab('Calendar', Icons.calendar_month_rounded,
+              CalendarPage(role: Role.teacher, user: widget.user)),
         ];
       case Role.admin:
         return [
@@ -106,8 +133,11 @@ class _RoleShellState extends State<RoleShell> {
               'Courses', Icons.library_books_rounded, AdminCoursesPage()),
           const _Tab('Assessments', Icons.assignment_rounded,
               AssessmentsPage(role: Role.admin)),
-          const _Tab('Announcements', Icons.campaign_rounded,
-              AnnouncementsPage()),
+          const _Tab(
+            'Announcements',
+            Icons.campaign_rounded,
+            AnnouncementsPage(role: Role.admin),
+          ),
         ];
     }
   }
@@ -116,6 +146,8 @@ class _RoleShellState extends State<RoleShell> {
   Widget build(BuildContext context) {
     final role = widget.role;
     final tabs = _tabs();
+
+    final showAnnouncementIcon = role != Role.admin;
 
     return Scaffold(
       body: SafeArea(
@@ -127,22 +159,25 @@ class _RoleShellState extends State<RoleShell> {
               child: Row(
                 children: [
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${role.label} portal',
-                            style: const TextStyle(
-                                color: AppColors.muted, fontSize: 13)),
-                        Text(
-                          tabs[_index].label,
-                          style: GoogleFonts.bricolageGrotesque(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -0.8),
-                        ),
-                      ],
+                    child: Text(
+                      '${role.label} portal',
+                      style: const TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 13,
+                      ),
                     ),
                   ),
+                  if (showAnnouncementIcon) ...[
+                    IconButton(
+                      onPressed: _openAnnouncements,
+                      tooltip: 'Announcements',
+                      icon: const Icon(
+                        Icons.campaign_outlined,
+                        color: AppColors.purple,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
                   GestureDetector(
                     onTap: _openProfile,
                     child: AppAvatar(_initials, size: 44),

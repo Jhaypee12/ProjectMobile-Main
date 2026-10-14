@@ -11,8 +11,9 @@ const cardBorder = Color(0xFFDFD7F0);
 const red = Color(0xFFD32F2F);
 
 class AssessmentsPage extends StatefulWidget {
-  const AssessmentsPage({super.key, required this.role});
+  const AssessmentsPage({super.key, required this.role, this.user});
   final Role role;
+  final AppUser? user;
 
   @override
   State<AssessmentsPage> createState() => _AssessmentsPageState();
@@ -46,7 +47,9 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
       _error = null;
     });
     try {
-      final raw = await ApiService.getAssessments();
+      final raw = await ApiService.getAssessments(
+        studentId: widget.role == Role.student ? widget.user?.id : null,
+      );
       if (!mounted) return;
       setState(() {
         _items = raw.map((j) => _Assessment.fromJson(j)).toList();
@@ -311,14 +314,15 @@ class _AssessmentsPageState extends State<AssessmentsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Assessments',
-                      style: TextStyle(
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        color: darkText,
+                    const Expanded(
+                      child: Text(
+                        'Assessments',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: darkText,
+                        ),
                       ),
                     ),
                     if (canManage)

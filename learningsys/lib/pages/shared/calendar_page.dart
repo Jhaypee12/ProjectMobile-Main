@@ -11,8 +11,9 @@ const cardBorder = Color(0xFFDFD7F0);
 const red = Color(0xFFD32F2F);
 
 class CalendarPage extends StatefulWidget {
-  const CalendarPage({super.key, required this.role});
+  const CalendarPage({super.key, required this.role, this.user});
   final Role role;
+  final AppUser? user;
 
   @override
   State<CalendarPage> createState() => _CalendarPageState();
@@ -43,7 +44,9 @@ class _CalendarPageState extends State<CalendarPage> {
       _error = null;
     });
     try {
-      final raw = await ApiService.getAssessments();
+      final raw = await ApiService.getAssessments(
+        studentId: widget.role == Role.student ? widget.user?.id : null,
+      );
       if (!mounted) return;
       setState(() {
         _assessments = raw.map((j) => _CalAssessment.fromJson(j)).toList();
@@ -387,7 +390,6 @@ class _DayBox extends StatelessWidget {
     return parts.join(' - ');
   }
 }
-
 
 class _CalAssessment {
   final String id;

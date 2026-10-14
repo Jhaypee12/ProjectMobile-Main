@@ -57,10 +57,11 @@ router.get('/', async (req, res) => {
 
       const enrollment = {};
       for (const m of myDocs) {
+        if (!m.name) continue;
         for (const s of (m.students || [])) {
           const sid = s.student ? s.student.toString() : '';
           if (sid === studentId) {
-            enrollment[m.name] = {
+            enrollment[m.name.toLowerCase().trim()] = {
               score: s.score ?? 0,
               grade: s.grade ?? '',
               section: s.section ?? '',
@@ -70,10 +71,13 @@ router.get('/', async (req, res) => {
       }
 
       courses = courses
-        .filter((c) => enrollment[c.name] !== undefined)
+        .filter((c) => {
+          if (!c.name) return false;
+          return enrollment[c.name.toLowerCase().trim()] !== undefined;
+        })
         .map((c) => ({
           ...c,
-          ...enrollment[c.name],
+          ...enrollment[c.name.toLowerCase().trim()],
         }));
     }
 
@@ -83,7 +87,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// CREATE
 router.post('/', async (req, res) => {
   try {
     const {
@@ -110,7 +113,6 @@ router.post('/', async (req, res) => {
   }
 });
 
-// UPDATE
 router.put('/:id', async (req, res) => {
   try {
     const {
@@ -142,7 +144,6 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// DELETE
 router.delete('/:id', async (req, res) => {
   try {
     const removed = await Course.findByIdAndDelete(req.params.id);
